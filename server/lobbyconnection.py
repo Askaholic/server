@@ -30,6 +30,7 @@ from .games import GameState, VisibilityState
 from .geoip_service import GeoIpService
 from .ice_servers.coturn import CoturnHMAC
 from .ice_servers.nts import TwilioNTS
+from .main import app
 from .matchmaker import MatchmakerQueue, Search
 from .player_service import PlayerService
 from .players import Player, PlayerState
@@ -57,20 +58,21 @@ class AuthenticationError(Exception):
         self.message = message
 
 
+@app.inject
 @with_logger
 class LobbyConnection(Router):
-    @timed()
+
     def __init__(
         self,
-        games: GameService,
-        players: PlayerService,
+        game_service: GameService,
+        player_service: PlayerService,
+        geoip_service: GeoIpService,
         nts_client: Optional[TwilioNTS],
-        geoip: GeoIpService,
         matchmaker_queue: MatchmakerQueue
     ):
-        self.geoip_service = geoip
-        self.game_service = games
-        self.player_service = players
+        self.geoip_service = geoip_service
+        self.game_service = game_service
+        self.player_service = player_service
         self.nts_client = nts_client
         self.coturn_generator = CoturnHMAC()
         self.matchmaker_queue = matchmaker_queue

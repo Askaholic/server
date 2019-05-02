@@ -20,7 +20,6 @@ from .ice_servers.nts import TwilioNTS
 from .lobbyconnection import LobbyConnection
 from .protocol import QDataStreamProtocol
 from .servercontext import ServerContext
-from .geoip_service import GeoIpService
 from .player_service import PlayerService
 from .game_service import GameService
 from .ladder_service import LadderService
@@ -84,7 +83,6 @@ def encode_queues(queues):
 @app.inject
 def run_lobby_server(
     game_service: GameService,
-    geoip_service: GeoIpService,
     player_service: PlayerService,
     address: (str, int),
     loop,
@@ -140,10 +138,7 @@ def run_lobby_server(
 
     def make_connection() -> LobbyConnection:
         return LobbyConnection(
-            geoip=geoip_service,
-            games=game_service,
             nts_client=nts_client,
-            players=player_service,
             matchmaker_queue=matchmaker_queue
         )
     ctx = ServerContext(make_connection, name="LobbyServer")

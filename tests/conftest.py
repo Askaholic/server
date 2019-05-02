@@ -215,7 +215,6 @@ def players(create_player):
 
 @pytest.fixture
 def player_service(loop, db_engine):
-    app._services = {}
     return PlayerService()
 
 
@@ -239,6 +238,7 @@ def matchmaker_queue(game_service) -> MatchmakerQueue:
 @pytest.fixture()
 def api_accessor():
     app._services = {}
+
     class FakeRequestResponse:
         def __init__(self):
             self.status_code = 200
