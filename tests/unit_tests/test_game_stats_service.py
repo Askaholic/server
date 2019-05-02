@@ -13,21 +13,24 @@ from tests import CoroMock
 
 @pytest.fixture()
 def event_service():
-    m = Mock(spec=EventService)
+    m = Mock(spec=EventService())
     m.execute_batch_update = CoroMock()
     return m
 
 
 @pytest.fixture()
 def achievement_service():
-    m = Mock(spec=AchievementService)
+    m = Mock(spec=AchievementService())
     m.execute_batch_update = CoroMock()
     return m
 
 
 @pytest.fixture()
 def game_stats_service(event_service, achievement_service):
-    return GameStatsService(event_service, achievement_service)
+    gs = GameStatsService()
+    gs._event_service = event_service
+    gs._achievement_service = achievement_service
+    return gs
 
 
 @pytest.fixture()

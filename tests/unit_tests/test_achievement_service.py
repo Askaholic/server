@@ -1,4 +1,3 @@
-import asyncio
 import json
 from unittest.mock import Mock
 
@@ -11,14 +10,16 @@ from tests import CoroMock
 
 @pytest.fixture()
 def api_accessor():
-    m = Mock(spec=ApiAccessor)
+    m = Mock(spec=ApiAccessor())
     m.update_achievements = CoroMock()
     return m
 
 
 @pytest.fixture()
 def service(api_accessor: ApiAccessor):
-    return AchievementService(api_accessor)
+    achievement = AchievementService()
+    achievement.api_accessor = api_accessor
+    return achievement
 
 
 def create_queue():

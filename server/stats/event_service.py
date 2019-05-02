@@ -3,6 +3,8 @@ import json
 from server.api.api_accessor import ApiAccessor
 from server.decorators import with_logger
 
+from ..main import app
+
 EVENT_CUSTOM_GAMES_PLAYED = 'cfa449a6-655b-48d5-9a27-6044804fe35c'
 EVENT_RANKED_1V1_GAMES_PLAYED = '4a929def-e347-45b4-b26d-4325a3115859'
 EVENT_LOST_ACUS = 'd6a699b7-99bc-4a7f-b128-15e1e289a7b3'
@@ -33,6 +35,8 @@ EVENT_SERAPHIM_PLAYS = 'fefcb392-848f-4836-9683-300b283bc308'
 EVENT_SERAPHIM_WINS = '15b6c19a-6084-4e82-ada9-6c30e282191f'
 
 
+@app.service("event_service")
+@app.inject
 @with_logger
 class EventService:
     def __init__(self, api_accessor: ApiAccessor):

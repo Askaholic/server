@@ -1,6 +1,9 @@
 import json
+
 from server.api.api_accessor import ApiAccessor
 from server.decorators import with_logger
+
+from ..main import app
 
 ACH_NOVICE = 'c6e6039f-c543-424e-ab5f-b34df1336e81'
 ACH_JUNIOR = 'd5c759fe-a1a8-4103-888d-3ba319562867'
@@ -61,6 +64,8 @@ ACH_DR_EVIL = 'a6b7dfa1-1ebc-4c6d-9305-4a9d623e1b4f'
 ACH_DONT_MESS_WITH_ME = '2103e0de-1c87-4fba-bc1b-0bba66669607'
 
 
+@app.service("achievement_service")
+@app.inject
 @with_logger
 class AchievementService:
     def __init__(self, api_accessor: ApiAccessor):

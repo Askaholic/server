@@ -41,9 +41,10 @@ async def test_server_valid_login(loop, lobby_server):
                           'number_of_games': 5},
                    'id': 1,
                    'login': 'test'}
-    lobby_server.close()
+    print("CLOSING")
+    await proto.drain()
     proto.close()
-    await lobby_server.wait_closed()
+    print("DONE")
 
 
 async def test_player_info_broadcast(loop, lobby_server):
@@ -85,7 +86,7 @@ async def test_public_host(loop, lobby_server, player_service):
 
 
 @pytest.mark.slow
-async def test_host_missing_fields(loop, lobby_server, player_service):
+async def test_host_missing_fields(loop, lobby_server):
     player_id, session, proto = await connect_and_sign_in(
         ('test', 'test_password'),
         lobby_server
@@ -93,18 +94,17 @@ async def test_host_missing_fields(loop, lobby_server, player_service):
 
     await read_until(proto, lambda msg: msg['command'] == 'game_info')
 
-    with ClientTest(loop=loop, process_nat_packets=True, proto=proto) as client:
-        proto.send_message({
-            'command': 'game_host',
-            'mod': '',
-            'visibility': VisibilityState.to_string(VisibilityState.PUBLIC),
-            'title': ''
-        })
-        await proto.drain()
+    proto.send_message({
+        'command': 'game_host',
+        'mod': '',
+        'visibility': VisibilityState.to_string(VisibilityState.PUBLIC),
+        'title': ''
+    })
+    await proto.drain()
 
-        msg = await read_until(proto, lambda msg: msg['command'] == 'game_info')
+    msg = await read_until(proto, lambda msg: msg['command'] == 'game_info')
 
-        assert msg['title'] == 'test&#x27;s game'
-        assert msg['mapname'] == 'scmp_007'
-        assert msg['map_file_path'] == 'maps/scmp_007.zip'
-        assert msg['featured_mod'] == 'faf'
+    assert msg['title'] == 'test&#x27;s game'
+    assert msg['mapname'] == 'scmp_007'
+    assert msg['map_file_path'] == 'maps/scmp_007.zip'
+    assert msg['featured_mod'] == 'faf'

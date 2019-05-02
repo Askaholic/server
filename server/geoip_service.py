@@ -11,8 +11,10 @@ from maxminddb.errors import InvalidDatabaseError
 
 from . import config
 from .decorators import with_logger
+from .main import app
 
 
+@app.service("geoip_service")
 @with_logger
 class GeoIpService(object):
     """

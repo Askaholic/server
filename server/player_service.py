@@ -4,14 +4,16 @@ from typing import Optional, Set
 import aiocron
 import marisa_trie
 import server.db as db
-from server.decorators import with_logger
-from server.players import Player
 from sqlalchemy import select
 
 from .db.models import (avatars, avatars_list, clan, clan_membership,
                         global_rating, ladder1v1_rating, login)
+from .decorators import with_logger
+from .main import app
+from .players import Player
 
 
+@app.service("player_service")
 @with_logger
 class PlayerService:
     def __init__(self):

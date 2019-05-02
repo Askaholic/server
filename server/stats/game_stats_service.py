@@ -8,8 +8,11 @@ from server.stats.event_service import *
 from server.stats.unit import *
 
 from ..factions import Faction
+from ..main import app
 
 
+@app.service("game_stats_service")
+@app.inject
 @with_logger
 class GameStatsService:
     def __init__(self, event_service: EventService, achievement_service: AchievementService):

@@ -11,14 +11,19 @@ from server.matchmaker import MatchmakerQueue
 from server.players import Player
 
 from .ladder_service import LadderService
+from .main import app
+from .player_service import PlayerService
+from .stats.game_stats_service import GameStatsService
 
 
+@app.service("game_service")
+@app.inject
 @with_logger
 class GameService:
     """
     Utility class for maintaining lifecycle of games
     """
-    def __init__(self, player_service, game_stats_service):
+    def __init__(self, player_service: PlayerService, game_stats_service: GameStatsService):
         self._dirty_games = set()
         self._dirty_queues = set()
         self.player_service = player_service

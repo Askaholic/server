@@ -649,7 +649,7 @@ async def test_report_army_stats_sends_stats_for_defeated_player(game: Game):
 async def test_partial_stats_not_affecting_rating_persistence(custom_game, event_service, achievement_service):
     from server.stats.game_stats_service import GameStatsService
     game = custom_game
-    game._game_stats_service = GameStatsService(event_service, achievement_service)
+    game._game_stats_service = GameStatsService()
     game.state = GameState.LOBBY
     players = add_players(game, 2)
     game.set_player_option(players[0].id, 'Team', 2)

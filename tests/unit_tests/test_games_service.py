@@ -1,12 +1,5 @@
-import pytest
-from server.game_service import GameService
 from server.games import CustomGame, Game, LadderGame, VisibilityState
 from server.players import PlayerState
-
-
-@pytest.fixture
-def game_service(players, game_stats_service):
-    return GameService(players, game_stats_service)
 
 
 def test_initialization(game_service):

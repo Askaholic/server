@@ -11,6 +11,7 @@ import logging
 from unittest import mock
 
 import pytest
+from server import app
 from server.api.api_accessor import ApiAccessor
 from server.config import DB_LOGIN, DB_PASSWORD, DB_PORT, DB_SERVER
 from server.game_service import GameService
@@ -213,17 +214,20 @@ def players(create_player):
 
 
 @pytest.fixture
-def player_service(loop, players):
+def player_service(loop, db_engine):
+    app._services = {}
     return PlayerService()
 
 
 @pytest.fixture
-def game_service(player_service, game_stats_service):
-    return GameService(player_service, game_stats_service)
+def game_service():
+    app._services = {}
+    return GameService()
 
 
 @pytest.fixture
 def geoip_service() -> GeoIpService:
+    app._services = {}
     return GeoIpService()
 
 
@@ -234,6 +238,7 @@ def matchmaker_queue(game_service) -> MatchmakerQueue:
 
 @pytest.fixture()
 def api_accessor():
+    app._services = {}
     class FakeRequestResponse:
         def __init__(self):
             self.status_code = 200
@@ -264,17 +269,27 @@ def api_accessor():
 
 @pytest.fixture
 def event_service(api_accessor):
+    app._services = {}
     from server.stats.event_service import EventService
-    return EventService(api_accessor)
+    es = EventService()
+    es.api_accessor = api_accessor
+    return es
 
 
 @pytest.fixture
 def achievement_service(api_accessor):
+    app._services = {}
     from server.stats.achievement_service import AchievementService
-    return AchievementService(api_accessor)
+    achievement = AchievementService()
+    achievement.api_accessor = api_accessor
+    return achievement
 
 
 @pytest.fixture
 def game_stats_service(event_service, achievement_service):
+    app._services = {}
     from server.stats.game_stats_service import GameStatsService
-    return GameStatsService(event_service, achievement_service)
+    gs = GameStatsService()
+    gs.event_service = event_service
+    gs.achievement_service = achievement_service
+    return gs

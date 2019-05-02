@@ -1,6 +1,5 @@
-import asyncio
 import json
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
@@ -11,12 +10,14 @@ from tests import CoroMock
 
 @pytest.fixture()
 def api_accessor():
-    return Mock(spec=ApiAccessor)
+    return Mock(spec=ApiAccessor())
 
 
 @pytest.fixture()
 def service(api_accessor: ApiAccessor):
-    return EventService(api_accessor)
+    es = EventService()
+    es.api_accessor = api_accessor
+    return es
 
 
 def create_queue():

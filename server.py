@@ -15,14 +15,10 @@ import socket
 
 import server
 import server.config as config
-from server.api.api_accessor import ApiAccessor
-from server.config import DB_SERVER, DB_PORT, DB_LOGIN, DB_PASSWORD, DB_NAME, TWILIO_ACCOUNT_SID
-from server.game_service import GameService
-from server.geoip_service import GeoIpService
-from server.matchmaker import MatchmakerQueue
-from server.player_service import PlayerService
-from server.stats.game_stats_service import GameStatsService, EventService, AchievementService
+from server.config import (DB_LOGIN, DB_NAME, DB_PASSWORD, DB_PORT, DB_SERVER,
+                           TWILIO_ACCOUNT_SID)
 from server.ice_servers.nts import TwilioNTS
+from server.matchmaker import MatchmakerQueue
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -64,8 +60,6 @@ if __name__ == '__main__':
         )
         engine = loop.run_until_complete(engine_fut)
 
-        players_online = PlayerService()
-
         twilio_nts = None
         if TWILIO_ACCOUNT_SID:
             twilio_nts = TwilioNTS()
@@ -73,25 +67,15 @@ if __name__ == '__main__':
             logger.warning(
                 "Twilio is not set up. You must set TWILIO_ACCOUNT_SID and TWILIO_TOKEN to use the Twilio ICE servers.")
 
-        api_accessor = None
-        if config.USE_API:
-            api_accessor = ApiAccessor()
+        players_online = server.app._get_service("player_service")
+        game_service = server.app._get_service("game_service")
 
-        event_service = EventService(api_accessor)
-        achievement_service = AchievementService(api_accessor)
-        game_stats_service = GameStatsService(event_service, achievement_service)
-
-        games = GameService(players_online, game_stats_service)
-
-        ctrl_server = loop.run_until_complete(server.run_control_server(loop, players_online, games))
+        ctrl_server = loop.run_until_complete(server.run_control_server(loop, players_online, game_service))
 
         lobby_server = server.run_lobby_server(
             address=('', 8001),
-            geoip_service=GeoIpService(),
-            player_service=players_online,
-            games=games,
             nts_client=twilio_nts,
-            matchmaker_queue=MatchmakerQueue('ladder1v1', game_service=games),
+            matchmaker_queue=MatchmakerQueue('ladder1v1', game_service=game_service),
             loop=loop
         )
 

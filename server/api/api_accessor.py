@@ -1,13 +1,17 @@
 import logging
-
-from oauthlib.oauth2 import BackendApplicationClient
-from oauthlib.oauth2.rfc6749.errors import MissingTokenError, InsecureTransportError
-from requests.exceptions import SSLError
-from requests_oauthlib import OAuth2Session
 import sys
 
+from requests.exceptions import SSLError
+
 import server.config as config
-from server.config import API_TOKEN_URI, API_BASE_URL, API_CLIENT_SECRET, API_CLIENT_ID
+from oauthlib.oauth2 import BackendApplicationClient
+from oauthlib.oauth2.rfc6749.errors import (InsecureTransportError,
+                                            MissingTokenError)
+from requests_oauthlib import OAuth2Session
+from server.config import (API_BASE_URL, API_CLIENT_ID, API_CLIENT_SECRET,
+                           API_TOKEN_URI)
+
+from ..main import app
 
 """
 Uncomment the following line if your API uses HTTP instead of HTTPS
@@ -71,9 +75,14 @@ class SessionManager:
             self.session = None
 
 
+@app.service("api_accessor")
 class ApiAccessor:
     def __init__(self):
         self.api_session = SessionManager()
+
+        # Destroy ourselves if we're not supposed to exist
+        if not config.USE_API:
+            self = None
 
     async def update_achievements(self, achievements_data, player_id):
 

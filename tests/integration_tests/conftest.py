@@ -4,35 +4,21 @@ import logging
 from unittest import mock
 
 import pytest
-from server import GameService, PlayerService, run_lobby_server
+from server import run_lobby_server
 from server.protocol import QDataStreamProtocol
 from server.matchmaker import MatchmakerQueue
 
 
 @pytest.fixture
-def mock_players():
-    m = mock.create_autospec(PlayerService())
-    m.client_version_info = (0, None)
-    return m
+def lobby_server(request, loop, game_service, mocker):
+    mocker.patch("server.player_service.PlayerService.is_uniqueid_exempt", side_effect=lambda id: True)
 
-
-@pytest.fixture
-def mock_games(mock_players):
-    return mock.create_autospec(GameService(mock_players))
-
-
-@pytest.fixture
-def lobby_server(request, loop, player_service, game_service, geoip_service):
     ctx = run_lobby_server(
         address=('127.0.0.1', None),
-        geoip_service=geoip_service,
-        player_service=player_service,
-        game_service=game_service,
         matchmaker_queue=MatchmakerQueue('ladder1v1', game_service),
         nts_client=None,
         loop=loop
     )
-    player_service.is_uniqueid_exempt = lambda id: True
 
     def fin():
         ctx.close()

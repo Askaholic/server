@@ -58,8 +58,8 @@ def mock_players(db_engine):
 
 
 @pytest.fixture
-def mock_games(mock_players, game_stats_service):
-    return mock.create_autospec(GameService(mock_players, game_stats_service))
+def mock_games():
+    return mock.create_autospec(GameService())
 
 
 @pytest.fixture
@@ -178,7 +178,7 @@ async def test_command_game_join_calls_join_game(
         mocker, lobbyconnection, game_service, test_game_info, players, game_stats_service):
     lobbyconnection.game_service = game_service
     mock_protocol = mocker.patch.object(lobbyconnection, 'protocol')
-    game = mock.create_autospec(Game(42, game_service, game_stats_service))
+    game = mock.create_autospec(Game)
     game.state = GameState.LOBBY
     game.password = None
     game.game_mode = 'faf'
@@ -206,7 +206,7 @@ async def test_command_game_join_uid_as_str(
         mocker, lobbyconnection, game_service, test_game_info, players, game_stats_service):
     lobbyconnection.game_service = game_service
     mock_protocol = mocker.patch.object(lobbyconnection, 'protocol')
-    game = mock.create_autospec(Game(42, game_service, game_stats_service))
+    game = mock.create_autospec(Game)
     game.state = GameState.LOBBY
     game.password = None
     game.game_mode = 'faf'
@@ -234,7 +234,7 @@ async def test_command_game_join_without_password(
         lobbyconnection, game_service, test_game_info, players, game_stats_service):
     lobbyconnection.send = mock.Mock()
     lobbyconnection.game_service = game_service
-    game = mock.create_autospec(Game(42, game_service, game_stats_service))
+    game = mock.create_autospec(Game)
     game.state = GameState.LOBBY
     game.password = 'password'
     game.game_mode = 'faf'
@@ -297,8 +297,8 @@ def test_abort(loop, mocker, lobbyconnection):
 def test_send_game_list(mocker, lobbyconnection, game_stats_service):
     protocol = mocker.patch.object(lobbyconnection, 'protocol')
     games = mocker.patch.object(lobbyconnection, 'game_service')  # type: GameService
-    game1, game2 = mock.create_autospec(Game(42, mock.Mock(), game_stats_service)), \
-                   mock.create_autospec(Game(22, mock.Mock(), game_stats_service))
+    game1, game2 = mock.create_autospec(Game), \
+                   mock.create_autospec(Game)
 
     games.open_games = [game1, game2]
 
@@ -693,7 +693,7 @@ async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnect
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
     lobbyconnection.game_service = game_service
-    game = mock.create_autospec(Game(42, game_service, game_stats_service))
+    game = mock.create_autospec(Game)
     game.state = game_state
     game.password = None
     game.game_mode = 'faf'
@@ -719,7 +719,7 @@ async def test_game_connection_restored_if_game_exists(lobbyconnection: LobbyCon
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
     lobbyconnection.game_service = game_service
-    game = mock.create_autospec(Game(42, game_service, game_stats_service))
+    game = mock.create_autospec(Game)
     game.state = game_state
     game.password = None
     game.game_mode = 'faf'
