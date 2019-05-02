@@ -6,12 +6,12 @@ Copyright (c) 2015-2016 Michael Søndergaard <sheeo@faforever.com>
 
 Distributed under GPLv3, see license.txt
 """
+
 import json
 import logging
 from typing import Any, Dict, Optional
 
 import aiomeasures
-
 from . import config as config
 from .games.game import GameState, VisibilityState
 from .stats.game_stats_service import GameStatsService
@@ -25,6 +25,7 @@ from .player_service import PlayerService
 from .game_service import GameService
 from .ladder_service import LadderService
 from .control import init as run_control_server
+from .main import app
 from .matchmaker import MatchmakerQueue
 
 __version__ = '0.9.17'
@@ -36,8 +37,8 @@ __copyright__ = 'Copyright (c) 2011-2015 ' + __author__
 
 __all__ = [
     'GameConnection',
-    'GameStatsService',
     'GameService',
+    'GameStatsService',
     'LadderService',
     'run_lobby_server',
     'run_control_server',
@@ -80,13 +81,14 @@ def encode_queues(queues):
     })
 
 
+@app.inject
 def run_lobby_server(
-    address: (str, int),
+    game_service: GameService,
+    geoip_service: GeoIpService,
     player_service: PlayerService,
-    games: GameService,
+    address: (str, int),
     loop,
     nts_client: Optional[TwilioNTS],
-    geoip_service: GeoIpService,
     matchmaker_queue: MatchmakerQueue
 ) -> ServerContext:
     """
@@ -95,10 +97,10 @@ def run_lobby_server(
 
     def report_dirties():
         try:
-            dirty_games = games.dirty_games
-            dirty_queues = games.dirty_queues
+            dirty_games = game_service.dirty_games
+            dirty_queues = game_service.dirty_queues
             dirty_players = player_service.dirty_players
-            games.clear_dirty()
+            game_service.clear_dirty()
             player_service.clear_dirty()
 
             if len(dirty_queues) > 0:
@@ -111,7 +113,7 @@ def run_lobby_server(
             # aggregation at the next abstraction layer down :P
             for game in dirty_games:
                 if game.state == GameState.ENDED:
-                    games.remove_game(game)
+                    game_service.remove_game(game)
 
                 # So we're going to be broadcasting this to _somebody_...
                 message = encode_dict(game.to_dict())
@@ -139,7 +141,7 @@ def run_lobby_server(
     def make_connection() -> LobbyConnection:
         return LobbyConnection(
             geoip=geoip_service,
-            games=games,
+            games=game_service,
             nts_client=nts_client,
             players=player_service,
             matchmaker_queue=matchmaker_queue
