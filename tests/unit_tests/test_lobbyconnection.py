@@ -674,7 +674,12 @@ async def test_game_connection_not_restored_if_no_such_game_exists(lobbyconnecti
     lobbyconnection.player = mock_player
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
-    await lobbyconnection.command_restore_game_session({'game_id': 123})
+    lobbyconnection._authenticated = True
+
+    await lobbyconnection.on_message_received({
+        'command': 'restore_game_session',
+        'game_id': 123
+    })
 
     assert not lobbyconnection.player.game_connection
     assert lobbyconnection.player.state == PlayerState.IDLE
@@ -694,6 +699,7 @@ async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnect
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
     lobbyconnection.game_service = game_service
+    lobbyconnection._authenticated = True
     game = mock.create_autospec(Game)
     game.state = game_state
     game.password = None
@@ -701,7 +707,10 @@ async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnect
     game.id = 42
     game_service.games[42] = game
 
-    await lobbyconnection.command_restore_game_session({'game_id': 42})
+    await lobbyconnection.on_message_received({
+        'command': 'restore_game_session',
+        'game_id': 42
+    })
 
     assert not lobbyconnection.game_connection
     assert lobbyconnection.player.state == PlayerState.IDLE
