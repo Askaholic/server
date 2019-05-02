@@ -173,11 +173,11 @@ class LobbyConnection(Router):
             self.abort("Error processing command")
 
     @route('ping')
-    def command_ping(self, msg):
+    async def command_ping(self, msg):
         self.protocol.send_raw(self.protocol.pack_message('PONG'))
 
     @route('pong')
-    def command_pong(self, msg):
+    async def command_pong(self, msg):
         pass
 
     @route('create_account')
@@ -943,7 +943,7 @@ class LobbyConnection(Router):
             else:
                 raise ValueError('invalid type argument')
 
-    @asyncio.coroutine
+    @route("ice_servers")
     async def command_ice_servers(self, message):
         if not self.player:
             return
