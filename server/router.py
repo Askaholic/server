@@ -58,11 +58,13 @@ class Router(metaclass=RouterMeta):
                 "Unrecognized command %s(%s) from %s",
                 message, args, self
             )
+            return
 
         try:
             coro = handler(self, *args)
         except (TypeError, ValueError) as e:
             self._logger.exception("Bad command arguments: %s", e)
+            return
 
         return await coro
 

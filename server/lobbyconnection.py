@@ -172,11 +172,11 @@ class LobbyConnection(Router):
             self._logger.exception(ex)
             self.abort("Error processing command")
 
-    @route('PING')
+    @route('ping')
     def command_ping(self, msg):
         self.protocol.send_raw(self.protocol.pack_message('PONG'))
 
-    @route('PONG')
+    @route('pong')
     def command_pong(self, msg):
         pass
 
