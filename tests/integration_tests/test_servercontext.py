@@ -1,10 +1,9 @@
 import asyncio
-import pytest
-from unittest import mock
 
-from server import ServerContext
+import pytest
+from server import ServerContext, fake_statsd
 from server.protocol import QDataStreamProtocol
-from server import fake_statsd
+from tests import CoroMock
 
 
 @pytest.fixture
@@ -24,7 +23,7 @@ def mock_server(loop):
         def on_message_received(self, msg):
             pass
     mock_server = MockServer()
-    mock_server.on_connection_lost = mock.Mock()
+    mock_server.on_connection_lost = CoroMock()
     return mock_server
 
 

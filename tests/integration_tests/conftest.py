@@ -27,7 +27,7 @@ def lobby_server(request, loop, player_service, game_service, geoip_service):
         address=('127.0.0.1', None),
         geoip_service=geoip_service,
         player_service=player_service,
-        games=game_service,
+        game_service=game_service,
         matchmaker_queue=MatchmakerQueue('ladder1v1', game_service),
         nts_client=None,
         loop=loop
