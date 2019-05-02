@@ -51,8 +51,8 @@ class GameService:
 
         # Synchronously initialise the game-id counter and static-ish-data.
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(asyncio.ensure_future(self.initialise_game_counter()))
-        loop.run_until_complete(loop.create_task(self.update_data()))
+        loop.run_until_complete(self.initialise_game_counter())
+        loop.run_until_complete(self.update_data())
         self._update_cron = aiocron.crontab('*/10 * * * *', func=self.update_data)
 
     async def initialise_game_counter(self):

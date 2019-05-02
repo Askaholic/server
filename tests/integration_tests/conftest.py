@@ -1,16 +1,23 @@
 import asyncio
 import hashlib
 import logging
-from unittest import mock
 
 import pytest
 from server import run_lobby_server
-from server.protocol import QDataStreamProtocol
+from server.main import app
 from server.matchmaker import MatchmakerQueue
+from server.protocol import QDataStreamProtocol
 
 
 @pytest.fixture
-def lobby_server(request, loop, game_service, mocker):
+def reset_services():
+    # Needed to prevent a connection dropping from one test from
+    # affecting a different test
+    app._services = {}
+
+
+@pytest.fixture
+def lobby_server(request, loop, reset_services, game_service, mocker):
     mocker.patch("server.player_service.PlayerService.is_uniqueid_exempt", side_effect=lambda id: True)
 
     ctx = run_lobby_server(

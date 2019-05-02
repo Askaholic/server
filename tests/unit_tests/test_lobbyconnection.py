@@ -322,7 +322,6 @@ async def test_send_coop_maps(mocker, lobbyconnection):
     await lobbyconnection.send_coop_maps()
 
     args = protocol.send_messages.call_args_list
-    print(args)
     assert len(args) == 1
     coop_maps = args[0][0][0]
     for info in coop_maps:
@@ -669,12 +668,13 @@ async def test_broadcast(lobbyconnection: LobbyConnection, mocker):
     player.lobby_connection.send_warning.assert_called_with("This is a test message")
     tuna.lobby_connection.send_warning.assert_called_with("This is a test message")
 
+
 async def test_game_connection_not_restored_if_no_such_game_exists(lobbyconnection: LobbyConnection, mocker, mock_player):
     protocol = mocker.patch.object(lobbyconnection, 'protocol')
     lobbyconnection.player = mock_player
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
-    lobbyconnection.command_restore_game_session({'game_id': 123})
+    await lobbyconnection.command_restore_game_session({'game_id': 123})
 
     assert not lobbyconnection.player.game_connection
     assert lobbyconnection.player.state == PlayerState.IDLE
@@ -684,6 +684,7 @@ async def test_game_connection_not_restored_if_no_such_game_exists(lobbyconnecti
         "style": "info",
         "text": "The game you were connected to does no longer exist"
     })
+
 
 @pytest.mark.parametrize("game_state", [GameState.INITIALIZING, GameState.ENDED])
 async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnection: LobbyConnection, game_service: GameService,
@@ -700,7 +701,7 @@ async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnect
     game.id = 42
     game_service.games[42] = game
 
-    lobbyconnection.command_restore_game_session({'game_id': 42})
+    await lobbyconnection.command_restore_game_session({'game_id': 42})
 
     assert not lobbyconnection.game_connection
     assert lobbyconnection.player.state == PlayerState.IDLE
@@ -713,12 +714,15 @@ async def test_game_connection_not_restored_if_game_state_prohibits(lobbyconnect
 
 
 @pytest.mark.parametrize("game_state", [GameState.LIVE, GameState.LOBBY])
-async def test_game_connection_restored_if_game_exists(lobbyconnection: LobbyConnection, game_service: GameService,
-                                                       game_stats_service, game_state, mock_player):
+async def test_game_connection_restored_if_game_exists(
+        lobbyconnection: LobbyConnection,
+        game_service: GameService,
+        game_stats_service, game_state, mock_player):
     lobbyconnection.player = mock_player
     lobbyconnection.player.game_connection = None
     lobbyconnection.player.state = PlayerState.IDLE
     lobbyconnection.game_service = game_service
+    lobbyconnection._authenticated = True
     game = mock.create_autospec(Game)
     game.state = game_state
     game.password = None
@@ -726,7 +730,10 @@ async def test_game_connection_restored_if_game_exists(lobbyconnection: LobbyCon
     game.id = 42
     game_service.games[42] = game
 
-    lobbyconnection.command_restore_game_session({'game_id': 42})
+    await lobbyconnection.on_message_received({
+        'command': 'restore_game_session',
+        'game_id': 42,
+    })
 
     assert lobbyconnection.game_connection
     assert lobbyconnection.player.state == PlayerState.PLAYING

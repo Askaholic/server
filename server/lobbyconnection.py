@@ -665,7 +665,8 @@ class LobbyConnection(Router):
         self.send_mod_list()
         self.send_game_list()
 
-    def command_restore_game_session(self, message):
+    @route('restore_game_session')
+    async def command_restore_game_session(self, message):
         game_id = int(message.get('game_id'))
 
         # Restore the player's game connection, if the game still exists and is live
@@ -683,8 +684,6 @@ class LobbyConnection(Router):
             game=game,
             player=self.player,
             protocol=self.protocol,
-            player_service=self.player_service,
-            games=self.game_service,
             state=GameConnectionState.CONNECTED_TO_HOST
         )
 
@@ -859,8 +858,6 @@ class LobbyConnection(Router):
             game=game,
             player=self.player,
             protocol=self.protocol,
-            player_service=self.player_service,
-            games=self.game_service
         )
 
         self.player.state = PlayerState.HOSTING if is_host else PlayerState.JOINING

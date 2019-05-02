@@ -18,14 +18,12 @@ def lobbythread():
 
 
 @pytest.fixture
-def game_connection(request, game, players, game_service, player_service):
+def game_connection(request, game, players):
     from server import GameConnection
     conn = GameConnection(
         game=game,
         player=players.hosting,
         protocol=mock.Mock(),
-        player_service=player_service,
-        games=game_service
     )
 
     conn.finished_sim = False

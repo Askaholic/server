@@ -41,10 +41,8 @@ async def test_server_valid_login(loop, lobby_server):
                           'number_of_games': 5},
                    'id': 1,
                    'login': 'test'}
-    print("CLOSING")
     await proto.drain()
     proto.close()
-    print("DONE")
 
 
 async def test_player_info_broadcast(loop, lobby_server):

@@ -1,6 +1,4 @@
 import asyncio
-import time
-from collections import defaultdict
 
 import server.db as db
 from sqlalchemy import text
@@ -9,6 +7,7 @@ from .abc.base_game import GameConnectionState
 from .decorators import timed, with_logger
 from .game_service import GameService
 from .games.game import Game, GameState, ValidityState, Victory
+from .main import app
 from .player_service import PlayerService
 from .players import Player, PlayerState
 from .protocol import GpgNetServerProtocol, QDataStreamProtocol
@@ -19,6 +18,7 @@ class AuthenticationError(Exception):
     pass
 
 
+@app.inject
 @with_logger
 class GameConnection(GpgNetServerProtocol, Router):
     """
@@ -27,11 +27,11 @@ class GameConnection(GpgNetServerProtocol, Router):
 
     def __init__(
         self,
+        player_service: PlayerService,
+        game_service: GameService,
         game: Game,
         player: Player,
         protocol: QDataStreamProtocol,
-        player_service: PlayerService,
-        games: GameService,
         state: GameConnectionState = GameConnectionState.INITIALIZING
     ):
         """
@@ -42,7 +42,7 @@ class GameConnection(GpgNetServerProtocol, Router):
 
         self.protocol = protocol
         self._state = state
-        self.game_service = games
+        self.game_service = game_service
         self.player_service = player_service
 
         self._player = player
