@@ -1,11 +1,16 @@
 from abc import ABCMeta, abstractmethod
-
-
 from typing import List, Union
+
 from server.abc.base_game import InitMode
 
+from ..router import RouterMeta
 
-class GpgNetServerProtocol(metaclass=ABCMeta):
+
+class ABCRouter(ABCMeta, RouterMeta):
+    pass
+
+
+class GpgNetServerProtocol(metaclass=ABCRouter):
     """
     Defines an interface for the server side GPGNet protocol
     """

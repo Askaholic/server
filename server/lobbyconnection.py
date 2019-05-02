@@ -6,6 +6,8 @@ import json
 import random
 import urllib.parse
 import urllib.request
+import warnings
+from functools import wraps
 from typing import Optional
 
 import requests
@@ -32,6 +34,7 @@ from .matchmaker import MatchmakerQueue, Search
 from .player_service import PlayerService
 from .players import Player, PlayerState
 from .protocol import QDataStreamProtocol
+from .router import Router, route
 from .types import Address
 
 
@@ -55,7 +58,7 @@ class AuthenticationError(Exception):
 
 
 @with_logger
-class LobbyConnection():
+class LobbyConnection(Router):
     @timed()
     def __init__(
         self,
@@ -88,8 +91,7 @@ class LobbyConnection():
     def authenticated(self):
         return self._authenticated
 
-    @asyncio.coroutine
-    def on_connection_made(self, protocol: QDataStreamProtocol, peername: Address):
+    async def on_connection_made(self, protocol: QDataStreamProtocol, peername: Address):
         self.protocol = protocol
         self.peer_address = peername
         server.stats.incr("server.connections")
@@ -116,6 +118,16 @@ class LobbyConnection():
                 return False
         return True
 
+    def logged_in(handler_func):
+        @wraps(handler_func)
+        async def authenticator(self, *args, **kwargs):
+            if not self._authenticated:
+                self.abort("Message invalid for unauthenticated connection: %s" % handler_func)
+                return
+
+            return await handler_func(self, *args, **kwargs)
+        return authenticator
+
     async def on_message_received(self, message):
         """
         Dispatches incoming messages
@@ -138,22 +150,18 @@ class LobbyConnection():
                 raise ClientError("Your client version is no longer supported. Please update to the newest version: https://faforever.com")
                 return
 
-            handler = getattr(self, 'command_{}'.format(cmd))
-            if asyncio.iscoroutinefunction(handler):
-                await handler(message)
-            else:
-                handler(message)
+            await self.handle_command(message, message)
         except AuthenticationError as ex:
-            self.protocol.send_message(
-                {'command': 'authentication_failed',
-                 'text': ex.message}
-            )
+            self.protocol.send_message({
+                'command': 'authentication_failed',
+                'text': ex.message
+            })
         except ClientError as ex:
-            self.protocol.send_message(
-                {'command': 'notice',
-                 'style': 'error',
-                 'text': ex.message}
-            )
+            self.protocol.send_message({
+                'command': 'notice',
+                'style': 'error',
+                'text': ex.message
+            })
             if not ex.recoverable:
                 self.abort(ex.message)
         except (KeyError, ValueError) as ex:
@@ -164,14 +172,16 @@ class LobbyConnection():
             self._logger.exception(ex)
             self.abort("Error processing command")
 
+    @route('PING')
     def command_ping(self, msg):
         self.protocol.send_raw(self.protocol.pack_message('PONG'))
 
+    @route('PONG')
     def command_pong(self, msg):
         pass
 
-    @asyncio.coroutine
-    def command_create_account(self, message):
+    @route('create_account')
+    async def command_create_account(self, message):
         raise ClientError("FAF no longer supports direct registration. Please use the website to register.", recoverable=True)
 
     async def send_coop_maps(self):
@@ -211,11 +221,13 @@ class LobbyConnection():
 
     @timed()
     def send_game_list(self):
-        self.sendJSON({
+        self.send({
             'command': 'game_info',
             'games': [game.to_dict() for game in self.game_service.open_games]
         })
 
+    @route('social_remove')
+    @logged_in
     async def command_social_remove(self, message):
         if "friend" in message:
             subject_id = message["friend"]
@@ -231,6 +243,8 @@ class LobbyConnection():
                 friends_and_foes.c.subject_id == subject_id
             )))
 
+    @route('social_add')
+    @logged_in
     async def command_social_add(self, message):
         if "friend" in message:
             status = "FRIEND"
@@ -249,97 +263,29 @@ class LobbyConnection():
             ))
 
     def kick(self, message=None):
-        self.sendJSON(dict(command="notice", style="kick"))
+        self.send(dict(command="notice", style="kick"))
         if message:
-            self.sendJSON(dict(command="notice", style="info",
+            self.send(dict(command="notice", style="info",
                                                   text=message))
         self.abort()
 
     def send_updated_achievements(self, updated_achievements):
-        self.sendJSON(dict(command="updated_achievements", updated_achievements=updated_achievements))
+        self.send(dict(command="updated_achievements", updated_achievements=updated_achievements))
 
+    @route('admin')
+    @logged_in
     async def command_admin(self, message):
         action = message['action']
 
         if self.player.admin:
-            if action == "closeFA":
-                player = self.player_service[message['user_id']]
-                if player:
-                    self._logger.warning('Administrative action: %s closed game for %s', self.player, player)
-                    player.lobby_connection.sendJSON(dict(command="notice", style="kill"))
-                    player.lobby_connection.sendJSON(dict(command="notice", style="info",
-                                       text=("Your game was closed by an administrator ({admin_name}). "
-                                             "Please refer to our rules for the lobby/game here {rule_link}."
-                                       .format(admin_name=self.player.login,
-                                               rule_link=config.RULE_LINK))))
-
-            elif action == "closelobby":
-                player = self.player_service[message['user_id']]
-                ban_fail = None
-                if player:
-                    if 'ban' in message:
-                        reason = message['ban'].get('reason', 'Unspecified')
-                        duration = int(message['ban'].get('duration', 1))
-                        period = message['ban'].get('period', 'DAY').upper()
-                        self._logger.warning('Administrative action: %s closed client for %s with %s ban (Reason: %s)', self.player, player, duration, reason)
-                        async with db.engine.acquire() as conn:
-                            try:
-                                result = await conn.execute("SELECT reason from lobby_ban WHERE idUser=%s AND expires_at > NOW()", (message['user_id']))
-
-                                row = await result.fetchone()
-                                if row:
-                                    ban_fail = row[0]
-                                else:
-                                    if period not in ["DAY", "WEEK", "MONTH"]:
-                                        self._logger.warn('Tried to ban player with invalid period')
-                                        raise ClientError(f"Period '{period}' is not allowed!")
-
-                                    # NOTE: Text formatting in sql string is only ok because we just checked it's value
-                                    await conn.execute(
-                                        ban.insert().values(
-                                            player_id=player.id,
-                                            author_id=self.player.id,
-                                            reason=reason,
-                                            expires_at=func.date_add(
-                                                func.now(),
-                                                text(f"interval :duration {period}")
-                                            ),
-                                            level='GLOBAL'
-                                        ),
-                                        duration=duration
-                                    )
-                            except pymysql.MySQLError as e:
-                                raise ClientError('Your ban attempt upset the database: {}'.format(e))
-                    else:
-                        self._logger.warning('Administrative action: %s closed client for %s', self.player, player)
-                    player.lobby_connection.kick(
-                        message=("You were kicked from FAF by an administrator ({admin_name}). "
-                         "Please refer to our rules for the lobby/game here {rule_link}."
-                          .format(admin_name=self.player.login,
-                                  rule_link=config.RULE_LINK)))
-                    if ban_fail:
-                        raise ClientError("Kicked the player, but he was already banned!")
-
-            elif action == "requestavatars":
-                async with db.engine.acquire() as conn:
-                    result = await conn.execute("SELECT url, tooltip FROM `avatars_list`")
-
-                    data = {"command": "admin", "avatarlist": []}
-                    async for row in result:
-                        data['avatarlist'].append({
-                            "url": row["url"],
-                            "tooltip": row["tooltip"]
-                        })
-
-                    self.sendJSON(data)
-
-            elif action == "remove_avatar":
+            if action == "remove_avatar":
                 idavatar = message["idavatar"]
                 iduser = message["iduser"]
                 async with db.engine.acquire() as conn:
-                    await conn.execute("DELETE FROM `avatars` "
-                                              "WHERE `idUser` = %s "
-                                              "AND `idAvatar` = %s", (iduser, idavatar))
+                    await conn.execute(
+                        "DELETE FROM `avatars` "
+                        "WHERE `idUser` = %s "
+                        "AND `idAvatar` = %s", (iduser, idavatar))
 
             elif action == "add_avatar":
                 who = message['user']
@@ -375,7 +321,101 @@ class LobbyConnection():
                 for user_id in user_ids:
                     player = self.player_service[message[user_id]]
                     if player:
-                        player.lobby_connection.sendJSON(dict(command="social", autojoin=[channel]))
+                        player.lobby_connection.send(dict(command="social", autojoin=[channel]))
+
+    @route('admin', action='closeFA')
+    @logged_in
+    async def command_admin_close_fa(self, message):
+        if not self.player.admin:
+            return
+
+        user_id = int(message['user_id'])
+        player = self.player_service[user_id]
+        if not player:
+            return
+
+        self._logger.warning('Administrative action: %s closed game for %s', self.player, player)
+        player.lobby_connection.send({"command": "notice", "style": "kill"})
+        player.lobby_connection.send({
+            "command": "notice",
+            "style": "info",
+            "text": (f"Your game was closed by an administrator ({self.player.login}). "
+                     f"Please refer to our rules for the lobby/game here {config.RULE_LINK}.")
+        })
+
+    @route('admin', action='closelobby')
+    @logged_in
+    async def command_admin_closelobby(self, message):
+        if not self.player.admin:
+            return
+
+        user_id = int(message['user_id'])
+        player = self.player_service[user_id]
+        ban_fail = None
+        if not player:
+            return
+
+        if 'ban' in message:
+            reason = message['ban'].get('reason', 'Unspecified')
+            duration = int(message['ban'].get('duration', 1))
+            period = message['ban'].get('period', 'DAY').upper()
+            self._logger.warning('Administrative action: %s closed client for %s with %s ban (Reason: %s)', self.player, player, duration, reason)
+            # TODO: Extract banning to it's own function
+            async with db.engine.acquire() as conn:
+                try:
+                    result = await conn.execute("SELECT reason from lobby_ban WHERE idUser=%s AND expires_at > NOW()", (message['user_id']))
+
+                    row = await result.fetchone()
+                    if row:
+                        ban_fail = row[0]
+                    else:
+                        if period not in ["DAY", "WEEK", "MONTH"]:
+                            self._logger.warning('Tried to ban player with invalid period')
+                            raise ClientError(f"Period '{period}' is not allowed!")
+
+                        # NOTE: Text formatting in sql string is only ok because we just checked it's value
+                        await conn.execute(
+                            ban.insert().values(
+                                player_id=player.id,
+                                author_id=self.player.id,
+                                reason=reason,
+                                expires_at=func.date_add(
+                                    func.now(),
+                                    text(f"interval :duration {period}")
+                                ),
+                                level='GLOBAL'
+                            ),
+                            duration=duration
+                        )
+                except pymysql.MySQLError as e:
+                    raise ClientError('Your ban attempt upset the database: {}'.format(e))
+        else:
+            self._logger.warning('Administrative action: %s closed client for %s', self.player, player)
+        player.lobby_connection.kick(
+            message=("You were kicked from FAF by an administrator ({admin_name}). "
+             "Please refer to our rules for the lobby/game here {rule_link}."
+              .format(admin_name=self.player.login,
+                      rule_link=config.RULE_LINK)))
+        if ban_fail:
+            raise ClientError("Kicked the player, but he was already banned!")
+
+    @route('admin', action='requestavatars')
+    @logged_in
+    async def command_admin_requestavatars(self, message):
+        if not self.player.admin:
+            return
+
+        async with db.engine.acquire() as conn:
+            result = await conn.execute("SELECT url, tooltip FROM `avatars_list`")
+
+            data = {"command": "admin", "avatarlist": []}
+            async for row in result:
+                data['avatarlist'].append({
+                    "url": row["url"],
+                    "tooltip": row["tooltip"]
+                })
+
+            self.send(data)
 
     async def check_user_login(self, conn, login, password):
         # TODO: Hash passwords server-side so the hashing actually *does* something.
@@ -434,7 +474,7 @@ class LobbyConnection():
         if not version or not self.user_agent:
             update_msg['command'] = 'welcome'
             # For compatibility with 0.10.x updating mechanism
-            self.sendJSON(update_msg)
+            self.send(update_msg)
             return False
 
         # Check their client is reporting the right version number.
@@ -445,10 +485,10 @@ class LobbyConnection():
                 if "+" in version:
                     version = version.split('+')[0]
                 if semver.compare(versionDB, version) > 0:
-                    self.sendJSON(update_msg)
+                    self.send(update_msg)
                     return False
             except ValueError:
-                self.sendJSON(update_msg)
+                self.send(update_msg)
                 return False
         return True
 
@@ -464,7 +504,7 @@ class LobbyConnection():
 
         if response.get('result', '') == 'vm':
             self._logger.debug("Using VM: %d: %s", player_id, uid_hash)
-            self.sendJSON(dict(command="notice", style="error",
+            self.send(dict(command="notice", style="error",
                                text="You need to link your account to Steam in order to use FAF in a virtual machine. "
                                     "Please contact an admin or moderator on the forums if you feel this is a false positive."))
             self.send_warning("Your computer seems to be a virtual machine.<br><br>In order to "
@@ -489,6 +529,7 @@ class LobbyConnection():
                               "a false positive.",
                               fatal=True)
 
+            # TODO: Extract banning to it's own function
             with await db.engine.acquire() as conn:
                 try:
                     await conn.execute(
@@ -501,6 +542,7 @@ class LobbyConnection():
 
         return response.get('result', '') == 'honest'
 
+    @route('hello')
     async def command_hello(self, message):
         login = message['login'].strip()
         password = message['password']
@@ -567,7 +609,7 @@ class LobbyConnection():
         self.player.country = self.geoip_service.country(self.peer_address.host)
 
         # Send the player their own player info.
-        self.sendJSON({
+        self.send({
             "command": "welcome",
             "me": self.player.to_dict(),
 
@@ -577,7 +619,7 @@ class LobbyConnection():
         })
 
         # Tell player about everybody online. This must happen after "welcome".
-        self.sendJSON(
+        self.send(
             {
                 "command": "player_info",
                 "players": [player.to_dict() for player in self.player_service]
@@ -616,7 +658,7 @@ class LobbyConnection():
             channels.append("#%s_clan" % self.player.clan)
 
         json_to_send = {"command": "social", "autojoin": channels, "channels": channels, "friends": friends, "foes": foes, "power": permission_group}
-        self.sendJSON(json_to_send)
+        self.send(json_to_send)
 
         self.send_mod_list()
         self.send_game_list()
@@ -649,14 +691,17 @@ class LobbyConnection():
         if not hasattr(self.player, "game"):
             self.player.game = game
 
+    @route('ask_session')
     @timed
-    def command_ask_session(self, message):
+    async def command_ask_session(self, message):
         if self.check_version(message):
-            self.sendJSON({
+            self.send({
                 "command": "session",
                 "session": self.session
             })
 
+    @route('avatar')
+    @logged_in
     async def command_avatar(self, message):
         action = message['action']
 
@@ -673,7 +718,7 @@ class LobbyConnection():
                     avatarList.append(avatar)
 
                 if len(avatarList) > 0:
-                    self.sendJSON({"command": "avatar", "avatarlist": avatarList})
+                    self.send({"command": "avatar", "avatarlist": avatarList})
 
         elif action == "select":
             avatar = message['avatar']
@@ -689,8 +734,9 @@ class LobbyConnection():
         else:
             raise KeyError('invalid action')
 
-    @timed
-    def command_game_join(self, message):
+    @route('game_join')
+    @logged_in
+    async def command_game_join(self, message):
         """
         We are going to join a game.
         """
@@ -707,18 +753,20 @@ class LobbyConnection():
             game = self.game_service[uuid]
             if not game or game.state != GameState.LOBBY:
                 self._logger.debug("Game not in lobby state: %s", game)
-                self.sendJSON(dict(command="notice", style="info", text="The game you are trying to join is not ready."))
+                self.send(dict(command="notice", style="info", text="The game you are trying to join is not ready."))
                 return
 
             if game.password != password:
-                self.sendJSON(dict(command="notice", style="info", text="Bad password (it's case sensitive)"))
+                self.send(dict(command="notice", style="info", text="Bad password (it's case sensitive)"))
                 return
 
             self.launch_game(game, is_host=False)
 
         except KeyError:
-            self.sendJSON(dict(command="notice", style="info", text="The host has left the game"))
+            self.send(dict(command="notice", style="info", text="The host has left the game"))
 
+    @route('game_matchmaking')
+    @logged_in
     async def command_game_matchmaking(self, message):
         mod = message.get('mod', 'ladder1v1')
         state = message['state']
@@ -736,7 +784,7 @@ class LobbyConnection():
             result = await conn.execute("SELECT id FROM matchmaker_ban WHERE `userid` = %s", (self.player.id))
             row = await result.fetchone()
             if row:
-                self.sendJSON(dict(command="notice", style="error",
+                self.send(dict(command="notice", style="error",
                                    text="You are banned from the matchmaker. Contact an admin to have the reason."))
                 return
 
@@ -753,12 +801,15 @@ class LobbyConnection():
                 self._logger.info("%s is searching for ladder: %s", self.player, self.search)
                 asyncio.ensure_future(self.matchmaker_queue.search(self.search))
 
-    def command_coop_list(self, message):
+    @route('coop_list')
+    @logged_in
+    async def command_coop_list(self, message):
         """ Request for coop map list"""
-        asyncio.ensure_future(self.send_coop_maps())
+        await self.send_coop_maps()
 
-    @timed()
-    def command_game_host(self, message):
+    @route('game_host')
+    @logged_in
+    async def command_game_host(self, message):
         assert isinstance(self.player, Player)
 
         if self._attempted_connectivity_test:
@@ -775,7 +826,7 @@ class LobbyConnection():
         try:
             title.encode('ascii')
         except UnicodeEncodeError:
-            self.sendJSON(dict(command="notice", style="error", text="Non-ascii characters in game name detected."))
+            self.send(dict(command="notice", style="error", text="Non-ascii characters in game name detected."))
             return
 
         mod = message.get('mod') or 'faf'
@@ -820,8 +871,10 @@ class LobbyConnection():
         }
         if use_map:
             cmd['mapname'] = use_map
-        self.sendJSON(cmd)
+        self.send(cmd)
 
+    @route('modvault')
+    @logged_in
     async def command_modvault(self, message):
         type = message["type"]
 
@@ -841,7 +894,7 @@ class LobbyConnection():
                                    comments=[], description=description, played=played, likes=likes,
                                    downloads=downloads, date=int(date.timestamp()), uid=uid, name=name, version=version, author=author,
                                    ui=ui)
-                        self.sendJSON(out)
+                        self.send(out)
                     except:
                         self._logger.error("Error handling table_mod row (uid: {})".format(uid), exc_info=True)
                         pass
@@ -879,7 +932,7 @@ class LobbyConnection():
                         "JOIN mod_version v ON v.mod_id = s.mod_id "
                         "SET s.likes = s.likes + 1, likers=%s WHERE v.uid = %s",
                         json.dumps(likers), uid)
-                    self.sendJSON(out)
+                    self.send(out)
 
             elif type == "download":
                 uid = message["uid"]
@@ -919,7 +972,7 @@ class LobbyConnection():
                       and not attempt to reconnect.
         :return: None
         """
-        self.sendJSON({'command': 'notice',
+        self.send({'command': 'notice',
                        'style': 'info' if not fatal else 'error',
                        'text': message})
         if fatal:
@@ -941,6 +994,7 @@ class LobbyConnection():
         """
         Deprecated alias for send
         """
+        warnings.warn("`sendJSON` is deprecated! Use `send` instead", DeprecationWarning)
         self.send(data_dictionary)
 
     async def on_connection_lost(self):

@@ -34,7 +34,7 @@ def test_inform_player(ladder_service: LadderService):
 
     ladder_service.inform_player(p1)
 
-    assert p1.lobby_connection.sendJSON.called
+    assert p1.lobby_connection.send.called
 
 
 async def test_choose_map(ladder_service: LadderService):

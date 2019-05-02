@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections import defaultdict
 
 import server.db as db
@@ -11,6 +12,7 @@ from .games.game import Game, GameState, ValidityState, Victory
 from .player_service import PlayerService
 from .players import Player, PlayerState
 from .protocol import GpgNetServerProtocol, QDataStreamProtocol
+from .router import Router, route
 
 
 class AuthenticationError(Exception):
@@ -18,7 +20,7 @@ class AuthenticationError(Exception):
 
 
 @with_logger
-class GameConnection(GpgNetServerProtocol):
+class GameConnection(GpgNetServerProtocol, Router):
     """
     Responsible for connections to the game, using the GPGNet protocol
     """
@@ -40,7 +42,6 @@ class GameConnection(GpgNetServerProtocol):
 
         self.protocol = protocol
         self._state = state
-        self._waiters = defaultdict(list)
         self.game_service = games
         self.player_service = player_service
 
@@ -125,20 +126,31 @@ class GameConnection(GpgNetServerProtocol):
 
     @timed(limit=0.1)
     async def on_message_received(self, message):
+        """ Main entry point when reading messages """
+
+        try:
+            command, args = message['command'], message['args']
+            return await self.handle_action(command, *args)
+        except ValueError:
+            self._logger.warning("Bad message %s", message)
+
+    async def handle_action(self, command, args):
         """
-        Main entry point when reading messages
-        :param message:
-        :return:
+        Handle GpgNetSend messages, wrapped in the JSON protocol.
+
+        :param command: command type
+        :param args: command arguments
+        :return: None
         """
         try:
-            cmd_id, args = message['command'], message['args']
-            await self.handle_action(cmd_id, args)
-            if cmd_id in self._waiters:
-                for waiter in self._waiters[cmd_id]:
-                    waiter.set_result(message)
-                    self._waiters[cmd_id].remove(waiter)
-        except ValueError as ex:  # pragma: no cover
-            self._logger.error("Garbage command %s %s", ex, message)
+            return await self.handle_command(command, *args)
+        except AuthenticationError as e:
+            self._logger.exception("Authentication error: %s", e)
+            self.abort()
+        except Exception as e:  # pragma: no cover
+            self._logger.exception(e)
+            self._logger.exception("Something awful happened in a game thread!")
+            self.abort()
 
     async def connect_to_host(self, peer: "GameConnection"):
         """
@@ -165,34 +177,11 @@ class GameConnection(GpgNetServerProtocol):
                                 player_uid=self.player.id,
                                 offer=False)
 
-    async def handle_action(self, command, args):
-        """
-        Handle GpgNetSend messages, wrapped in the JSON protocol
-        :param command: command type
-        :param args: command arguments
-        :return: None
-        """
-
-        try:
-            await COMMAND_HANDLERS[command](self, *args)
-        except KeyError:
-            self._logger.warning(
-                "Unrecognized command %s: %s from player %s",
-                command, args, self.player
-            )
-        except (TypeError, ValueError) as e:
-            self._logger.exception("Bad command arguments: %s", e)
-        except AuthenticationError as e:
-            self._logger.exception("Authentication error: %s", e)
-            self.abort()
-        except Exception as e:  # pragma: no cover
-            self._logger.exception(e)
-            self._logger.exception("Something awful happened in a game thread!")
-            self.abort()
-
-    async def handle_desync(self, *_args):  # pragma: no cover
+    @route("Desync")
+    async def handle_desync(self):  # pragma: no cover
         self.game.desyncs += 1
 
+    @route("GameOption")
     async def handle_game_option(self, key, value):
         if key == 'Victory':
             self.game.gameOptions['Victory'] = Victory.from_gpgnet_string(value)
@@ -225,6 +214,7 @@ class GameConnection(GpgNetServerProtocol):
 
         self._mark_dirty()
 
+    @route("GameMods")
     async def handle_game_mods(self, mode, args):
         if mode == "activated":
             # In this case args is the number of mods
@@ -242,6 +232,7 @@ class GameConnection(GpgNetServerProtocol):
                     self.game.mods[row["uid"]] = row["name"]
         self._mark_dirty()
 
+    @route("PlayerOption")
     async def handle_player_option(self, id_, command, value):
         if self.player.state != PlayerState.HOSTING:
             return
@@ -249,6 +240,7 @@ class GameConnection(GpgNetServerProtocol):
         self.game.set_player_option(int(id_), command, value)
         self._mark_dirty()
 
+    @route("AIOption")
     async def handle_ai_option(self, name, key, value):
         if self.player.state != PlayerState.HOSTING:
             return
@@ -256,6 +248,7 @@ class GameConnection(GpgNetServerProtocol):
         self.game.set_ai_option(str(name), key, value)
         self._mark_dirty()
 
+    @route("ClearSlot")
     async def handle_clear_slot(self, slot):
         if self.player.state != PlayerState.HOSTING:
             return
@@ -263,6 +256,7 @@ class GameConnection(GpgNetServerProtocol):
         self.game.clear_slot(int(slot))
         self._mark_dirty()
 
+    @route("GameResult")
     async def handle_game_result(self, army, result):
         army = int(army)
         result = str(result)
@@ -282,6 +276,7 @@ class GameConnection(GpgNetServerProtocol):
         except (KeyError, ValueError):  # pragma: no cover
             self._logger.warning("Invalid result for %s reported: %s", army, result)
 
+    @route("OperationComplete")
     async def handle_operation_complete(self, army, secondary, delta):
         if not int(army) == 1:
             return
@@ -308,12 +303,15 @@ class GameConnection(GpgNetServerProtocol):
                 (mission, self.game.id, secondary, delta, len(self.game.players))
             )
 
+    @route("JsonStats")
     async def handle_json_stats(self, stats):
         await self.game.report_army_stats(stats)
 
+    @route("EnforceRating")
     async def handle_enforce_rating(self):
         self.game.enforce_rating = True
 
+    @route("TeamkillReport")
     async def handle_teamkill_report(self, gametime, victim_id, victim_name, teamkiller_id, teamkiller_name):
         """
             :param gametime: seconds of gametime when kill happened
@@ -330,6 +328,7 @@ class GameConnection(GpgNetServerProtocol):
                 (teamkiller_id, victim_id, self.game.id, gametime)
             )
 
+    @route("IceMsg")
     async def handle_ice_message(self, receiver_id, ice_msg):
         receiver_id = int(receiver_id)
         peer = self.player_service.get_player(receiver_id)
@@ -351,6 +350,7 @@ class GameConnection(GpgNetServerProtocol):
             "args": [int(self.player.id), ice_msg]
         })
 
+    @route("GameState")
     async def handle_game_state(self, state):
         """
         Changes in game state
@@ -391,6 +391,7 @@ class GameConnection(GpgNetServerProtocol):
 
         self._mark_dirty()
 
+    @route("GameEnded")
     async def handle_game_ended(self, *args):
         """
         Signals that the simulation has ended. This is currently unused but
@@ -398,6 +399,7 @@ class GameConnection(GpgNetServerProtocol):
         """
         pass
 
+    @route("Rehost")
     async def handle_rehost(self, *args):
         """
         Signals that the user has rehosted the game. This is currently unused but
@@ -405,6 +407,7 @@ class GameConnection(GpgNetServerProtocol):
         """
         pass
 
+    @route("Bottleneck")
     async def handle_bottleneck(self, *args):
         """
         Not sure what this command means. This is currently unused but
@@ -412,6 +415,7 @@ class GameConnection(GpgNetServerProtocol):
         """
         pass
 
+    @route("BottleneckCleared")
     async def handle_bottleneck_cleared(self, *args):
         """
         Not sure what this command means. This is currently unused but
@@ -419,6 +423,7 @@ class GameConnection(GpgNetServerProtocol):
         """
         pass
 
+    @route("Disconnected")
     async def handle_disconnected(self, *args):
         """
         Not sure what this command means. This is currently unused but
@@ -426,12 +431,14 @@ class GameConnection(GpgNetServerProtocol):
         """
         pass
 
+    @route("Chat")
     async def handle_chat(self, message: str):
         """
         Whenever the player sends a chat message during the game lobby.
         """
         pass
 
+    @route("GameFull")
     async def handle_game_full(self):
         """
         Sent when all game slots are full
@@ -489,27 +496,3 @@ class GameConnection(GpgNetServerProtocol):
 
     def __str__(self):
         return "GameConnection({}, {})".format(self.player, self.game)
-
-
-COMMAND_HANDLERS = {
-    "Desync":               GameConnection.handle_desync,
-    "GameState":            GameConnection.handle_game_state,
-    "GameOption":           GameConnection.handle_game_option,
-    "GameMods":             GameConnection.handle_game_mods,
-    "PlayerOption":         GameConnection.handle_player_option,
-    "AIOption":             GameConnection.handle_ai_option,
-    "ClearSlot":            GameConnection.handle_clear_slot,
-    "GameResult":           GameConnection.handle_game_result,
-    "OperationComplete":    GameConnection.handle_operation_complete,
-    "JsonStats":            GameConnection.handle_json_stats,
-    "EnforceRating":        GameConnection.handle_enforce_rating,
-    "TeamkillReport":       GameConnection.handle_teamkill_report,
-    "GameEnded":            GameConnection.handle_game_ended,
-    "Rehost":               GameConnection.handle_rehost,
-    "Bottleneck":           GameConnection.handle_bottleneck,
-    "BottleneckCleared":    GameConnection.handle_bottleneck_cleared,
-    "Disconnected":         GameConnection.handle_disconnected,
-    "IceMsg":               GameConnection.handle_ice_message,
-    "Chat":                 GameConnection.handle_chat,
-    "GameFull":             GameConnection.handle_game_full
-}

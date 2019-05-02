@@ -13,7 +13,7 @@ from tests import CoroMock
 @pytest.fixture
 def lobbythread():
     return mock.Mock(
-        sendJSON=lambda obj: None
+        send=lambda obj: None
     )
 
 
