@@ -44,16 +44,16 @@ class App(object):
 
         spec = inspect.getfullargspec(obj)
 
-        services = []
-        for arg in spec.args:
-            if arg in self._service_factories:
-                services.append(self._get_service(arg))
-            elif arg != 'self':
-                # Stop on the first argument that is not a service
-                break
-
         @wraps(obj)
         def wrapper(*args, **kwargs):
+            services = []
+            for arg in spec.args:
+                if arg in self._service_factories:
+                    services.append(self._get_service(arg))
+                elif arg != 'self':
+                    # Stop on the first argument that is not a service
+                    break
+
             new_args = services + list(args)
             return obj(*new_args, **kwargs)
 
