@@ -17,12 +17,12 @@ def reset_services():
 
 
 @pytest.fixture
-def lobby_server(request, loop, reset_services, game_service, mocker):
+def lobby_server(request, loop, reset_services, mocker):
     mocker.patch("server.player_service.PlayerService.is_uniqueid_exempt", side_effect=lambda id: True)
 
     ctx = run_lobby_server(
         address=('127.0.0.1', None),
-        matchmaker_queue=MatchmakerQueue('ladder1v1', game_service),
+        matchmaker_queue=MatchmakerQueue('ladder1v1'),
         nts_client=None,
         loop=loop
     )

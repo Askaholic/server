@@ -1,19 +1,21 @@
 import asyncio
-
 from collections import OrderedDict
 from concurrent.futures import CancelledError
 
 import server
 from server.decorators import with_logger
+
+from ..main import app
 from .search import Search
 
 
+@app.inject
 @with_logger
 class MatchmakerQueue:
     def __init__(
         self,
-        queue_name: str,
-        game_service: "GameService"
+        game_service: "GameService",
+        queue_name: str
     ):
         self.game_service = game_service
         self.queue_name = queue_name

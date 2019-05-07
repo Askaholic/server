@@ -75,7 +75,7 @@ if __name__ == '__main__':
         lobby_server = server.run_lobby_server(
             address=('', 8001),
             nts_client=twilio_nts,
-            matchmaker_queue=MatchmakerQueue('ladder1v1', game_service=game_service),
+            matchmaker_queue=MatchmakerQueue('ladder1v1'),
             loop=loop
         )
 
