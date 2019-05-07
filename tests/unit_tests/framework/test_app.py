@@ -1,9 +1,13 @@
 from framework import App
+from pytest import fixture
 
 
-def test_app():
-    app = App()
+@fixture
+def app():
+    return App()
 
+
+def test_app(app):
     @app.service("test_service")
     class TestService(object):
         pass
@@ -37,9 +41,7 @@ def test_app():
     OtherService()
 
 
-def test_nested_dependency():
-    app = App()
-
+def test_nested_dependency(app):
     @app.service("test_service")
     class TestService(object):
         pass
@@ -57,3 +59,22 @@ def test_nested_dependency():
             pass
 
     ts = TopService()
+
+
+def test_inject_class(app):
+    @app.inject
+    class SomeClass(object):
+        some_cls_attr = 10
+
+        def some_method(self):
+            pass
+
+    @app.inject
+    class SomeOtherClass(object):
+        pass
+
+    obj = SomeClass()
+    obj.some_method()
+    assert SomeClass.some_cls_attr == 10
+    assert isinstance(obj, SomeClass)
+    assert not isinstance(obj, SomeOtherClass)

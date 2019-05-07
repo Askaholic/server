@@ -1,6 +1,6 @@
-import inspect
-from functools import wraps
 from typing import Any, Callable, Dict
+
+from .injector import get_inject_wrapper, get_new_args
 
 
 class App(object):
@@ -42,22 +42,7 @@ class App(object):
         ```
         """
 
-        spec = inspect.getfullargspec(obj)
-
-        @wraps(obj)
-        def wrapper(*args, **kwargs):
-            services = []
-            for arg in spec.args:
-                if arg in self._service_factories:
-                    services.append(self._get_service(arg))
-                elif arg != 'self':
-                    # Stop on the first argument that is not a service
-                    break
-
-            new_args = services + list(args)
-            return obj(*new_args, **kwargs)
-
-        return wrapper
+        return get_inject_wrapper(self, obj)
 
     def _get_service(self, name: str) -> object:
         assert name in self._service_factories, \
