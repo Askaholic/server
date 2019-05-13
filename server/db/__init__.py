@@ -1,5 +1,3 @@
-from aiomysql.sa import create_engine
-
 engine = None
 
 
@@ -15,6 +13,11 @@ async def connect_engine(
     loop, host='localhost', port=3306, user='root', password='', db='faf_test',
     minsize=1, maxsize=1, echo=True
 ):
+    if port == 5432:
+        from aiopg.sa import create_engine
+    else:
+        from aiomysql.sa import create_engine
+
     engine = await create_engine(
         host=host,
         port=port,
