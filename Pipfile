@@ -22,6 +22,7 @@ requests-oauthlib = "*"
 sqlalchemy = "*"
 twilio = "*"
 humanize = "*"
+aiopg = "*"
 
 [dev-packages]
 pytest = "*"
