@@ -2,6 +2,10 @@ async def select_coop_maps(conn):
     raise NotImplementedError()
 
 
+async def select_coop_map_id(conn, filename):
+    raise NotImplementedError()
+
+
 async def delete_social(conn, user_id, subject_id):
     raise NotImplementedError()
 
@@ -78,6 +82,10 @@ async def select_mods(conn):
     raise NotImplementedError()
 
 
+async def select_mods_in(conn, uids):
+    raise NotImplementedError()
+
+
 async def select_mod(conn, uid):
     raise NotImplementedError()
 
@@ -87,6 +95,10 @@ async def update_liked_mod(conn, uid, likers):
 
 
 async def update_downloaded_mod(conn, uid):
+    raise NotImplementedError()
+
+
+async def update_played_mods(conn, uids):
     raise NotImplementedError()
 
 
@@ -131,4 +143,16 @@ async def select_ladder_map_pool(conn):
 
 
 async def select_featured_mod_info(conn, mod_name):
+    raise NotImplementedError()
+
+
+async def insert_coop_leaderboard_entry(
+    conn, mission, gameuid, secondary, delta, player_count
+):
+    raise NotImplementedError()
+
+
+async def insert_teamkill_report(
+    conn, teamkiller_id, victim_id, gameuid, gametime
+):
     raise NotImplementedError()

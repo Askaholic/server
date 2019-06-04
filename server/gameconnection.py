@@ -216,9 +216,7 @@ class GameConnection(GpgNetServerProtocol):
             uids = str(args).split()
             self.game.mods = {uid: "Unknown sim mod" for uid in uids}
             async with db.engine.acquire() as conn:
-                result = await conn.execute(
-                    text("SELECT `uid`, `name` from `table_mod` WHERE `uid` in :ids"),
-                    ids=tuple(uids))
+                result = await db.queries.select_mods_in(conn, uids)
                 async for row in result:
                     self.game.mods[row["uid"]] = row["name"]
         self._mark_dirty()
@@ -273,20 +271,15 @@ class GameConnection(GpgNetServerProtocol):
         secondary, delta = int(secondary), str(delta)
         async with db.engine.acquire() as conn:
             # FIXME: Resolve used map earlier than this
-            result = await conn.execute(
-                "SELECT `id` FROM `coop_map` WHERE `filename` = %s",
-                self.game.map_file_path)
+            result = await db.queries.select_coop_map_id(conn, self.game.map_file_path)
             row = await result.fetchone()
             if not row:
                 self._logger.debug("can't find coop map: %s", self.game.map_file_path)
                 return
             mission = row["id"]
 
-            await conn.execute(
-                """ INSERT INTO `coop_leaderboard`
-                    (`mission`, `gameuid`, `secondary`, `time`, `player_count`)
-                    VALUES (%s, %s, %s, %s, %s)""",
-                (mission, self.game.id, secondary, delta, len(self.game.players))
+            await db.queries.insert_coop_leaderboard_entry(
+                conn, mission, self.game.id, secondary, delta, len(self.game.players)
             )
 
     async def handle_json_stats(self, stats):
@@ -305,10 +298,8 @@ class GameConnection(GpgNetServerProtocol):
         """
 
         async with db.engine.acquire() as conn:
-            await conn.execute(
-                """ INSERT INTO `teamkills` (`teamkiller`, `victim`, `game_id`, `gametime`)
-                    VALUES (%s, %s, %s, %s)""",
-                (teamkiller_id, victim_id, self.game.id, gametime)
+            await db.queries.insert_teamkill_report(
+                conn, teamkiller_id, victim_id, self.game.id, gametime
             )
 
     async def handle_ice_message(self, receiver_id, ice_msg):
@@ -362,11 +353,7 @@ class GameConnection(GpgNetServerProtocol):
             if len(self.game.mods.keys()) > 0:
                 async with db.engine.acquire() as conn:
                     uids = list(self.game.mods.keys())
-                    await conn.execute(text(
-                        """ UPDATE mod_stats s JOIN mod_version v ON v.mod_id = s.mod_id
-                            SET s.times_played = s.times_played + 1 WHERE v.uid in :ids"""),
-                        ids=tuple(uids)
-                    )
+                    await db.queries.update_played_mods(conn, uids)
         elif state == 'Ended':
             await self.on_connection_lost()
 

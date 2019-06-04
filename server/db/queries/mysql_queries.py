@@ -13,6 +13,12 @@ async def select_coop_maps(conn):
     )
 
 
+async def select_coop_map_id(conn, filename):
+    return await conn.execute(
+        "SELECT `id` FROM `coop_map` WHERE `filename` = %s", filename
+    )
+
+
 async def delete_social(conn, user_id, subject_id):
     await conn.execute(
         friends_and_foes.delete().where(
@@ -167,6 +173,13 @@ async def select_mods(conn):
     )
 
 
+async def select_mods_in(conn, uids):
+    return await conn.execute(
+        text("SELECT `uid`, `name` from `table_mod` WHERE `uid` in :ids"),
+        ids=tuple(uids)
+    )
+
+
 async def select_mod(conn, uid):
     return await conn.execute(
         "SELECT uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon, likers FROM `table_mod` WHERE uid = %s LIMIT 1",
@@ -187,6 +200,16 @@ async def update_downloaded_mod(conn, uid):
         "UPDATE mod_stats s "
         "JOIN mod_version v ON v.mod_id = s.mod_id "
         "SET downloads=downloads+1 WHERE v.uid = %s", uid
+    )
+
+
+async def update_played_mods(conn, uids):
+    await conn.execute(
+        text(
+            """ UPDATE mod_stats s JOIN mod_version v ON v.mod_id = s.mod_id
+            SET s.times_played = s.times_played + 1 WHERE v.uid in :ids"""
+        ),
+        ids=tuple(uids)
     )
 
 
@@ -292,4 +315,25 @@ async def select_featured_mod_info(conn, mod_name):
         f"SELECT {tfiles}.fileId, MAX({tfiles}.version) "
         f"FROM {tfiles} LEFT JOIN {t} ON {tfiles}.fileId = {t}.id "
         f"GROUP BY {tfiles}.fileId"
+    )
+
+
+async def insert_coop_leaderboard_entry(
+    conn, mission, gameuid, secondary, delta, player_count
+):
+    await conn.execute(
+        """ INSERT INTO `coop_leaderboard`
+            (`mission`, `gameuid`, `secondary`, `time`, `player_count`)
+            VALUES (%s, %s, %s, %s, %s)""",
+        (mission, gameuid, secondary, delta, player_count)
+    )
+
+
+async def insert_teamkill_report(
+    conn, teamkiller_id, victim_id, gameuid, gametime
+):
+    await conn.execute(
+        """ INSERT INTO `teamkills` (`teamkiller`, `victim`, `game_id`, `gametime`)
+            VALUES (%s, %s, %s, %s)""",
+        (teamkiller_id, victim_id, gameuid, gametime)
     )
