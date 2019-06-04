@@ -50,18 +50,7 @@ class GameService:
 
     async def initialise_game_counter(self):
         async with db.engine.acquire() as conn:
-            # InnoDB, unusually, doesn't allow insertion of values greater than the next expected
-            # value into an auto_increment field. We'd like to do that, because we no longer insert
-            # games into the database when they don't start, so game ids aren't contiguous (as
-            # unstarted games consume ids that never get written out).
-            # So, id has to just be an integer primary key, no auto-increment: we handle its
-            # incrementing here in game service, but have to do this slightly expensive query on
-            # startup (though the primary key index probably makes it super fast anyway).
-            # This is definitely a better choice than inserting useless rows when games are created,
-            # doing LAST_UPDATE_ID to get the id number, and then doing an UPDATE when the actual
-            # data to go into the row becomes available: we now only do a single insert for each
-            # game, and don't end up with 800,000 junk rows in the database.
-            result = await conn.execute("SELECT MAX(id) FROM game_stats")
+            result = await db.queries.select_game_counter(conn)
             row = await result.fetchone()
             self.game_id_counter = row[0]
 
@@ -71,26 +60,21 @@ class GameService:
         time we need, but which can in principle change over time.
         """
         async with db.engine.acquire() as conn:
-            result = await conn.execute("SELECT `id`, `gamemod`, `name`, description, publish, `order` FROM game_featuredMods")
+            result = await db.queries.select_featured_mods(conn)
 
             async for row in result:
                 mod_id, name, full_name, description, publish, order = (row[i] for i in range(6))
                 self.featured_mods[name] = FeaturedMod(
                     mod_id, name, full_name, description, publish, order)
 
-            result = await conn.execute("SELECT uid FROM table_mod WHERE ranked = 1")
+            result = await db.queries.select_ranked_mod_ids(conn)
             rows = await result.fetchall()
 
             # Turn resultset into a list of uids
             self.ranked_mods = set(map(lambda x: x[0], rows))
 
             # Load all ladder maps
-            result = await conn.execute(
-                "SELECT ladder_map.idmap, "
-                "table_map.name, "
-                "table_map.filename "
-                "FROM ladder_map "
-                "INNER JOIN table_map ON table_map.id = ladder_map.idmap")
+            result = await db.queries.select_ladder_map_pool(conn)
             self.ladder_maps = [(row[0], row[1], row[2]) async for row in result]
 
             for mod in self.featured_mods.values():
@@ -98,12 +82,7 @@ class GameService:
                 if mod.name == 'ladder1v1':
                     continue
                 self.game_mode_versions[mod.name] = {}
-                t = "updates_{}".format(mod.name)
-                tfiles = t + "_files"
-                result = await conn.execute(
-                    "SELECT %s.fileId, MAX(%s.version) "
-                    "FROM %s LEFT JOIN %s ON %s.fileId = %s.id "
-                    "GROUP BY %s.fileId" % (tfiles, tfiles, tfiles, t, tfiles, t, tfiles))
+                result = await db.queries.select_featured_mod_info(conn, mod.name)
 
                 async for row in result:
                     fileId, version = row[0], row[1]

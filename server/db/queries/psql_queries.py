@@ -112,3 +112,23 @@ async def select_email_blacklist(conn):
 
 async def select_ladder_history(conn, player_id, limit):
     raise NotImplementedError()
+
+
+async def select_game_counter(conn):
+    raise NotImplementedError()
+
+
+async def select_featured_mods(conn):
+    raise NotImplementedError()
+
+
+async def select_ranked_mod_ids(conn):
+    raise NotImplementedError()
+
+
+async def select_ladder_map_pool(conn):
+    raise NotImplementedError()
+
+
+async def select_featured_mod_info(conn, mod_name):
+    raise NotImplementedError()

@@ -248,3 +248,48 @@ async def select_ladder_history(conn, player_id, limit):
         )
     ).order_by(game_stats.c.startTime.desc()).limit(limit)
     return await conn.execute(query)
+
+
+async def select_game_counter(conn):
+    # InnoDB, unusually, doesn't allow insertion of values greater than the next expected
+    # value into an auto_increment field. We'd like to do that, because we no longer insert
+    # games into the database when they don't start, so game ids aren't contiguous (as
+    # unstarted games consume ids that never get written out).
+    # So, id has to just be an integer primary key, no auto-increment: we handle its
+    # incrementing here in game service, but have to do this slightly expensive query on
+    # startup (though the primary key index probably makes it super fast anyway).
+    # This is definitely a better choice than inserting useless rows when games are created,
+    # doing LAST_UPDATE_ID to get the id number, and then doing an UPDATE when the actual
+    # data to go into the row becomes available: we now only do a single insert for each
+    # game, and don't end up with 800,000 junk rows in the database.
+    return await conn.execute("SELECT MAX(id) FROM game_stats")
+
+
+async def select_featured_mods(conn):
+    return await conn.execute(
+        "SELECT `id`, `gamemod`, `name`, description, publish, `order` FROM game_featuredMods"
+    )
+
+
+async def select_ranked_mod_ids(conn):
+    return await conn.execute("SELECT uid FROM table_mod WHERE ranked = 1")
+
+
+async def select_ladder_map_pool(conn):
+    return await conn.execute(
+        "SELECT ladder_map.idmap, "
+        "table_map.name, "
+        "table_map.filename "
+        "FROM ladder_map "
+        "INNER JOIN table_map ON table_map.id = ladder_map.idmap"
+    )
+
+
+async def select_featured_mod_info(conn, mod_name):
+    t = f"updates_{mod_name}"
+    tfiles = f"{t}_files"
+    return await conn.execute(
+        f"SELECT {tfiles}.fileId, MAX({tfiles}.version) "
+        f"FROM {tfiles} LEFT JOIN {t} ON {tfiles}.fileId = {t}.id "
+        f"GROUP BY {tfiles}.fileId"
+    )
