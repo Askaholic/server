@@ -3,11 +3,9 @@ import random
 from collections import defaultdict
 from typing import Dict, List, NamedTuple, Set
 
-from sqlalchemy import and_, func, select, text
-
 from . import db
 from .config import LADDER_ANTI_REPETITION_LIMIT
-from .db.models import game_featuredMods, game_player_stats, game_stats
+from .db.models import game_stats
 from .decorators import with_logger
 from .game_service import GameService
 from .matchmaker import MatchmakerQueue, Search
@@ -169,20 +167,9 @@ class LadderService:
 
     async def get_ladder_history(self, player: Player, limit=3) -> List[int]:
         async with db.engine.acquire() as conn:
-            query = select([
-                game_stats.c.mapId,
-            ]).select_from(
-                game_player_stats.join(game_stats).join(game_featuredMods)
-            ).where(
-                and_(
-                    game_player_stats.c.playerId == player.id,
-                    game_stats.c.startTime >= func.now() - text("interval 1 day"),
-                    game_featuredMods.c.gamemod == "ladder1v1"
-                )
-            ).order_by(game_stats.c.startTime.desc()).limit(limit)
-
             # Collect all the rows from the ResultProxy
-            return [row[game_stats.c.mapId] async for row in await conn.execute(query)]
+            result = await db.queries.select_ladder_history(conn, player.id, limit)
+            return [row[game_stats.c.mapId] async for row in result]
 
     def on_connection_lost(self, player):
         self.cancel_search(player)

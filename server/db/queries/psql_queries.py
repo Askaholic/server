@@ -108,3 +108,7 @@ async def select_client_version(conn):
 
 async def select_email_blacklist(conn):
     raise NotImplementedError()
+
+
+async def select_ladder_history(conn, player_id, limit):
+    raise NotImplementedError()

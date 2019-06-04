@@ -2,7 +2,8 @@ from sqlalchemy import and_, func, select, text
 
 from ..models import (
     avatars, avatars_list, ban, clan, clan_membership, friends_and_foes,
-    global_rating, ladder1v1_rating, login
+    game_featuredMods, game_player_stats, game_stats, global_rating,
+    ladder1v1_rating, login
 )
 
 
@@ -232,3 +233,18 @@ async def select_client_version(conn):
 
 async def select_email_blacklist(conn):
     return await conn.execute("SELECT domain FROM email_domain_blacklist")
+
+
+async def select_ladder_history(conn, player_id, limit):
+    query = select([
+        game_stats.c.mapId,
+    ]).select_from(
+        game_player_stats.join(game_stats).join(game_featuredMods)
+    ).where(
+        and_(
+            game_player_stats.c.playerId == player_id,
+            game_stats.c.startTime >= func.now() - text("interval 1 day"),
+            game_featuredMods.c.gamemod == "ladder1v1"
+        )
+    ).order_by(game_stats.c.startTime.desc()).limit(limit)
+    return await conn.execute(query)
