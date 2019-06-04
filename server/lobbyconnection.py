@@ -338,17 +338,9 @@ class LobbyConnection():
 
                 async with db.engine.acquire() as conn:
                     if avatar is None:
-                        await conn.execute(
-                            "DELETE FROM `avatars` "
-                            "WHERE `idUser` = "
-                            "(SELECT `id` FROM `login` WHERE `login`.`login` = %s)", (who, ))
+                        await db.queries.delete_user_avatars(conn, who)
                     else:
-                        await conn.execute(
-                            "INSERT INTO `avatars`(`idUser`, `idAvatar`) "
-                            "VALUES ((SELECT id FROM login WHERE login.login = %s),"
-                            "(SELECT id FROM avatars_list WHERE avatars_list.url = %s)) "
-                            "ON DUPLICATE KEY UPDATE `idAvatar` = (SELECT id FROM avatars_list WHERE avatars_list.url = %s)",
-                            (who, avatar, avatar))
+                        await db.queries.insert_user_avatar(conn, who, avatar)
 
             elif action == "broadcast":
                 for player in self.player_service:
@@ -370,18 +362,7 @@ class LobbyConnection():
 
     async def check_user_login(self, conn, login, password):
         # TODO: Hash passwords server-side so the hashing actually *does* something.
-        result = await conn.execute(
-            "SELECT login.id as id,"
-            "login.login as username,"
-            "login.password as password,"
-            "login.steamid as steamid,"
-            "login.create_time as create_time,"
-            "lobby_ban.reason as reason,"
-            "lobby_ban.expires_at as expires_at "
-            "FROM login "
-            "LEFT JOIN lobby_ban ON login.id = lobby_ban.idUser "
-            "WHERE LOWER(login)=%s "
-            "ORDER BY expires_at DESC", (login.lower(), ))
+        result = await db.queries.select_login_info(conn, login.lower())
 
         auth_error_message = "Login not found or password incorrect. They are case sensitive."
         row = await result.fetchone()
@@ -482,9 +463,12 @@ class LobbyConnection():
 
             with await db.engine.acquire() as conn:
                 try:
-                    await conn.execute(
-                        "INSERT INTO ban (player_id, author_id, reason, level) VALUES (%s, %s, %s, 'GLOBAL')",
-                        (player_id, player_id, "Auto-banned because of fraudulent login attempt"))
+                    await db.queries.insert_lobby_ban(
+                        conn,
+                        player_id=player_id,
+                        author_id=player_id,
+                        reason="Auto-banned because of fraudulent login attempt"
+                    )
                 except pymysql.MySQLError as e:
                     raise ClientError('Banning failed: {}'.format(e))
 
@@ -501,13 +485,7 @@ class LobbyConnection():
             server.stats.incr('user.logins')
             server.stats.gauge('users.online', len(self.player_service))
 
-            await conn.execute(
-                "UPDATE login SET ip = %(ip)s, user_agent = %(user_agent)s, last_login = NOW() WHERE id = %(player_id)s",
-                {
-                    "ip": self.peer_address.host,
-                    "user_agent": self.user_agent,
-                    "player_id": player_id
-                })
+            await db.queries.update_login(conn, self.peer_address.host, self.user_agent, player_id)
 
             if not self.player_service.is_uniqueid_exempt(player_id) and steamid is None:
                 conforms_policy = await self.check_policy_conformity(player_id, message['unique_id'], self.session)
@@ -525,7 +503,7 @@ class LobbyConnection():
             irc_pass = "md5:" + str(m.hexdigest())
 
             try:
-                await conn.execute("UPDATE anope.anope_db_NickCore SET pass = %s WHERE display = %s", (irc_pass, login))
+                await db.queries.update_irc_login(conn, login, irc_pass)
             except (pymysql.OperationalError, pymysql.ProgrammingError):
                 self._logger.error("Failure updating NickServ password for %s", login)
 
@@ -585,9 +563,7 @@ class LobbyConnection():
         friends = []
         foes = []
         async with db.engine.acquire() as conn:
-            result = await conn.execute(
-                "SELECT `subject_id`, `status` "
-                "FROM friends_and_foes WHERE user_id = %s", (self.player.id,))
+            result = await db.queries.select_social(conn, self.player.id)
 
             async for row in result:
                 target_id, status = row["subject_id"], row["status"]
@@ -655,9 +631,7 @@ class LobbyConnection():
             avatarList = []
 
             async with db.engine.acquire() as conn:
-                result = await conn.execute(
-                    "SELECT url, tooltip FROM `avatars` "
-                    "LEFT JOIN `avatars_list` ON `idAvatar` = `avatars_list`.`id` WHERE `idUser` = %s", (self.player.id,))
+                result = await db.queries.select_user_avatars(conn, self.player.id)
 
                 async for row in result:
                     avatar = {"url": row["url"], "tooltip": row["tooltip"]}
@@ -670,13 +644,9 @@ class LobbyConnection():
             avatar = message['avatar']
 
             async with db.engine.acquire() as conn:
-                await conn.execute(
-                    "UPDATE `avatars` SET `selected` = 0 WHERE `idUser` = %s", (self.player.id, ))
+                await db.queries.update_user_avatars_deselect_all(conn, self.player.id)
                 if avatar is not None:
-                    await conn.execute(
-                        "UPDATE `avatars` SET `selected` = 1 WHERE `idAvatar` ="
-                        "(SELECT id FROM avatars_list WHERE avatars_list.url = %s) and "
-                        "`idUser` = %s", (avatar, self.player.id))
+                    await db.queries.update_user_avatars_set_selected(conn, self.player.id, avatar)
         else:
             raise KeyError('invalid action')
 
@@ -722,7 +692,7 @@ class LobbyConnection():
             return
 
         async with db.engine.acquire() as conn:
-            result = await conn.execute("SELECT id FROM matchmaker_ban WHERE `userid` = %s", (self.player.id))
+            result = await db.queries.select_matchmaker_ban(conn, self.player.id)
             row = await result.fetchone()
             if row:
                 self.sendJSON(dict(command="notice", style="error",
@@ -815,7 +785,7 @@ class LobbyConnection():
 
         async with db.engine.acquire() as conn:
             if type == "start":
-                result = await conn.execute("SELECT uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon FROM table_mod ORDER BY likes DESC LIMIT 100")
+                result = await db.queries.select_mods(conn)
 
                 async for row in result:
                     uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon = (row[i] for i in range(12))
@@ -837,7 +807,7 @@ class LobbyConnection():
             elif type == "like":
                 canLike = True
                 uid = message['uid']
-                result = await conn.execute("SELECT uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon, likers FROM `table_mod` WHERE uid = %s LIMIT 1", (uid,))
+                result = await db.queries.select_mod(conn, uid)
 
                 row = await result.fetchone()
                 uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon, likerList = (row[i] for i in range(13))
@@ -862,19 +832,12 @@ class LobbyConnection():
 
                 # TODO: Avoid sending all the mod info in the world just because we liked it?
                 if canLike:
-                    await conn.execute(
-                        "UPDATE mod_stats s "
-                        "JOIN mod_version v ON v.mod_id = s.mod_id "
-                        "SET s.likes = s.likes + 1, likers=%s WHERE v.uid = %s",
-                        json.dumps(likers), uid)
+                    await db.queries.update_liked_mod(conn, uid, json.dumps(likers))
                     self.sendJSON(out)
 
             elif type == "download":
                 uid = message["uid"]
-                await conn.execute(
-                    "UPDATE mod_stats s "
-                    "JOIN mod_version v ON v.mod_id = s.mod_id "
-                    "SET downloads=downloads+1 WHERE v.uid = %s", uid)
+                await db.queries.update_downloaded_mod(conn, uid)
             else:
                 raise ValueError('invalid type argument')
 

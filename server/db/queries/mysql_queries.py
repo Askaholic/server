@@ -36,7 +36,13 @@ async def select_lobby_ban(conn, user_id):
 
 
 async def insert_lobby_ban(
-    conn, player_id, author_id, reason, period, duration="DAY", level='GLOBAL'
+    conn,
+    player_id,
+    author_id,
+    reason,
+    period=None,
+    duration="DAY",
+    level='GLOBAL'
 ):
     await conn.execute(
         ban.insert().values(
@@ -45,7 +51,7 @@ async def insert_lobby_ban(
             reason=reason,
             expires_at=func.date_add(
                 func.now(), text(f"interval :duration {period}")
-            ),
+            ) if period is not None else None,
             level=level
         ),
         duration=duration
@@ -61,4 +67,120 @@ async def delete_avatar(conn, user_id, avatar_id):
         "DELETE FROM `avatars` "
         "WHERE `idUser` = %s "
         "AND `idAvatar` = %s", (user_id, avatar_id)
+    )
+
+
+async def delete_user_avatars(conn, username):
+    await conn.execute(
+        "DELETE FROM `avatars` "
+        "WHERE `idUser` = "
+        "(SELECT `id` FROM `login` WHERE `login`.`login` = %s)", username
+    )
+
+
+async def insert_user_avatar(conn, username, avatar):
+    await conn.execute(
+        "INSERT INTO `avatars`(`idUser`, `idAvatar`) "
+        "VALUES ((SELECT id FROM login WHERE login.login = %s),"
+        "(SELECT id FROM avatars_list WHERE avatars_list.url = %s)) "
+        "ON DUPLICATE KEY UPDATE `idAvatar` = (SELECT id FROM avatars_list WHERE avatars_list.url = %s)",
+        (username, avatar, avatar)
+    )
+
+
+async def select_login_info(conn, username):
+    return await conn.execute(
+        "SELECT login.id as id,"
+        "login.login as username,"
+        "login.password as password,"
+        "login.steamid as steamid,"
+        "login.create_time as create_time,"
+        "lobby_ban.reason as reason,"
+        "lobby_ban.expires_at as expires_at "
+        "FROM login "
+        "LEFT JOIN lobby_ban ON login.id = lobby_ban.idUser "
+        "WHERE LOWER(login)=%s "
+        "ORDER BY expires_at DESC", username
+    )
+
+
+async def update_login(conn, ip, user_agent, player_id):
+    await conn.execute(
+        "UPDATE login SET ip = %(ip)s, user_agent = %(user_agent)s, last_login = NOW() WHERE id = %(player_id)s",
+        {
+            "ip": ip,
+            "user_agent": user_agent,
+            "player_id": player_id
+        }
+    )
+
+
+async def update_irc_login(conn, username, password):
+    await conn.execute(
+        "UPDATE anope.anope_db_NickCore SET pass = %s WHERE display = %s",
+        (password, username)
+    )
+
+
+async def select_social(conn, player_id):
+    return await conn.execute(
+        "SELECT `subject_id`, `status` "
+        "FROM friends_and_foes WHERE user_id = %s", player_id
+    )
+
+
+async def select_user_avatars(conn, player_id):
+    return await conn.execute(
+        "SELECT url, tooltip FROM `avatars` "
+        "LEFT JOIN `avatars_list` ON `idAvatar` = `avatars_list`.`id` WHERE `idUser` = %s",
+        player_id
+    )
+
+
+async def update_user_avatars_deselect_all(conn, player_id):
+    await conn.execute(
+        "UPDATE `avatars` SET `selected` = 0 WHERE `idUser` = %s", player_id
+    )
+
+
+async def update_user_avatars_set_selected(conn, player_id, avatar):
+    await conn.execute(
+        "UPDATE `avatars` SET `selected` = 1 WHERE `idAvatar` ="
+        "(SELECT id FROM avatars_list WHERE avatars_list.url = %s) and "
+        "`idUser` = %s", (avatar, player_id)
+    )
+
+
+async def select_matchmaker_ban(conn, player_id):
+    return await conn.execute(
+        "SELECT id FROM matchmaker_ban WHERE `userid` = %s", player_id
+    )
+
+
+async def select_mods(conn):
+    return await conn.execute(
+        "SELECT uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon FROM table_mod ORDER BY likes DESC LIMIT 100"
+    )
+
+
+async def select_mod(conn, uid):
+    return await conn.execute(
+        "SELECT uid, name, version, author, ui, date, downloads, likes, played, description, filename, icon, likers FROM `table_mod` WHERE uid = %s LIMIT 1",
+        uid
+    )
+
+
+async def update_liked_mod(conn, uid, likers):
+    await conn.execute(
+        "UPDATE mod_stats s "
+        "JOIN mod_version v ON v.mod_id = s.mod_id "
+        "SET s.likes = s.likes + 1, likers=%s WHERE v.uid = %s", likers, uid
+    )
+
+
+async def update_downloaded_mod(conn, uid):
+    await conn.execute(
+        "UPDATE mod_stats s "
+        "JOIN mod_version v ON v.mod_id = s.mod_id "
+        "SET downloads=downloads+1 WHERE v.uid = %s", uid
     )
