@@ -6,10 +6,8 @@ import marisa_trie
 import server.db as db
 from server.decorators import with_logger
 from server.players import Player
-from sqlalchemy import select
 
-from .db.models import (avatars, avatars_list, clan, clan_membership,
-                        global_rating, ladder1v1_rating, login)
+from .db.models import avatars_list, clan, global_rating, ladder1v1_rating
 
 
 @with_logger
@@ -51,26 +49,8 @@ class PlayerService:
 
     async def fetch_player_data(self, player):
         async with db.engine.acquire() as conn:
-            sql = select([
-                avatars_list.c.url,
-                avatars_list.c.tooltip,
-                global_rating.c.mean,
-                global_rating.c.deviation,
-                global_rating.c.numGames,
-                ladder1v1_rating.c.mean,
-                ladder1v1_rating.c.deviation,
-                clan.c.tag
-            ], use_labels=True).select_from(
-                login
-                .join(global_rating)
-                .join(ladder1v1_rating)
-                .outerjoin(clan_membership)
-                .outerjoin(clan)
-                .outerjoin(avatars)
-                .outerjoin(avatars_list)
-            ).where(login.c.id == player.id)
+            result = await db.queries.select_player_data(conn, player.id)
 
-            result = await conn.execute(sql)
             row = await result.fetchone()
             if not row:
                 return
@@ -117,23 +97,23 @@ class PlayerService:
         """
         async with db.engine.acquire() as conn:
             # Admins/mods
-            result = await conn.execute("SELECT `user_id`, `group` FROM lobby_admin")
+            result = await db.queries.select_lobby_admins(conn)
             rows = await result.fetchall()
             self.privileged_users = dict(map(lambda r: (r[0], r[1]), rows))
 
             # UniqueID-exempt users.
-            result = await conn.execute("SELECT `user_id` FROM uniqueid_exempt")
+            result = await db.queries.select_uniqueid_exempt(conn)
             rows = await result.fetchall()
             self.uniqueid_exempt = frozenset(map(lambda x: x[0], rows))
 
             # Client version number
-            result = await conn.execute("SELECT version, file FROM version_lobby ORDER BY id DESC LIMIT 1")
+            result = await db.queries.select_client_version(conn)
             row = await result.fetchone()
             if row is not None:
                 self.client_version_info = (row[0], row[1])
 
             # Blacklisted email domains (we don't like disposable email)
-            result = await conn.execute("SELECT domain FROM email_domain_blacklist")
+            result = await db.queries.select_email_blacklist(conn)
             # Get list of reversed blacklisted domains (so we can (pre)suffix-match incoming emails
             # in sublinear time)
             rows = await result.fetchall()

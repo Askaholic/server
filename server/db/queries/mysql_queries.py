@@ -1,6 +1,9 @@
-from sqlalchemy import and_, func, text
+from sqlalchemy import and_, func, select, text
 
-from ..models import ban, friends_and_foes
+from ..models import (
+    avatars, avatars_list, ban, clan, clan_membership, friends_and_foes,
+    global_rating, ladder1v1_rating, login
+)
 
 
 async def select_coop_maps(conn):
@@ -184,3 +187,48 @@ async def update_downloaded_mod(conn, uid):
         "JOIN mod_version v ON v.mod_id = s.mod_id "
         "SET downloads=downloads+1 WHERE v.uid = %s", uid
     )
+
+
+async def select_player_data(conn, player_id):
+    # yapf: disable
+    sql = select(
+        [
+            avatars_list.c.url,
+            avatars_list.c.tooltip,
+            global_rating.c.mean,
+            global_rating.c.deviation,
+            global_rating.c.numGames,
+            ladder1v1_rating.c.mean,
+            ladder1v1_rating.c.deviation,
+            clan.c.tag,
+        ],
+        use_labels=True,
+    ).select_from(
+        login.join(global_rating)
+        .join(ladder1v1_rating)
+        .outerjoin(clan_membership)
+        .outerjoin(clan)
+        .outerjoin(avatars)
+        .outerjoin(avatars_list)
+    ).where(login.c.id == player_id)
+    # yapf: enable
+
+    return await conn.execute(sql)
+
+
+async def select_lobby_admins(conn):
+    return await conn.execute("SELECT `user_id`, `group` FROM lobby_admin")
+
+
+async def select_uniqueid_exempt(conn):
+    return await conn.execute("SELECT `user_id` FROM uniqueid_exempt")
+
+
+async def select_client_version(conn):
+    return await conn.execute(
+        "SELECT version, file FROM version_lobby ORDER BY id DESC LIMIT 1"
+    )
+
+
+async def select_email_blacklist(conn):
+    return await conn.execute("SELECT domain FROM email_domain_blacklist")

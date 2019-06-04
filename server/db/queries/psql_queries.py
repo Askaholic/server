@@ -88,3 +88,23 @@ async def update_liked_mod(conn, uid, likers):
 
 async def update_downloaded_mod(conn, uid):
     raise NotImplementedError()
+
+
+async def select_player_data(conn, player_id):
+    raise NotImplementedError()
+
+
+async def select_lobby_admins(conn):
+    raise NotImplementedError()
+
+
+async def select_uniqueid_exempt(conn):
+    raise NotImplementedError()
+
+
+async def select_client_version(conn):
+    raise NotImplementedError()
+
+
+async def select_email_blacklist(conn):
+    raise NotImplementedError()
