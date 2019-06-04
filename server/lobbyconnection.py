@@ -110,11 +110,12 @@ class LobbyConnection():
             self.player = None
 
     def ensure_authenticated(self, cmd):
-        if not self._authenticated:
-            if cmd not in ['hello', 'ask_session', 'create_account', 'ping', 'pong', 'Bottleneck']:  # Bottleneck is sent by the game during reconnect
-                self.abort("Message invalid for unauthenticated connection: %s" % cmd)
-                return False
-        return True
+        if self._authenticated:
+            return True
+        if cmd in ['hello', 'ask_session', 'create_account', 'ping', 'pong', 'Bottleneck']:  # Bottleneck is sent by the game during reconnect
+            return True
+        self.abort(f"Message invalid for unauthenticated connection: {cmd}")
+        return False
 
     async def on_message_received(self, message):
         """
@@ -177,7 +178,7 @@ class LobbyConnection():
 
     async def send_coop_maps(self):
         async with db.engine.acquire() as conn:
-            result = await conn.execute("SELECT name, description, filename, type, id FROM `coop_map`")
+            result = await db.queries.select_coop_maps(conn)
 
             maps = []
             async for row in result:
@@ -227,10 +228,7 @@ class LobbyConnection():
             return
 
         async with db.engine.acquire() as conn:
-            await conn.execute(friends_and_foes.delete().where(and_(
-                friends_and_foes.c.user_id == self.player.id,
-                friends_and_foes.c.subject_id == subject_id
-            )))
+            await db.queries.delete_social(conn, self.player.id, subject_id)
 
     async def command_social_add(self, message):
         if "friend" in message:
@@ -243,21 +241,18 @@ class LobbyConnection():
             return
 
         async with db.engine.acquire() as conn:
-            await conn.execute(friends_and_foes.insert().values(
-                user_id=self.player.id,
-                status=status,
-                subject_id=subject_id,
-            ))
+            await db.queries.insert_social(
+                conn, self.player.id, subject_id, status
+            )
 
     def kick(self, message=None):
-        self.sendJSON(dict(command="notice", style="kick"))
+        self.sendJSON({"command": "notice", "style": "kick"})
         if message:
-            self.sendJSON(dict(command="notice", style="info",
-                                                  text=message))
+            self.sendJSON({"command": "notice", "style": "info", "text": message})
         self.abort()
 
     def send_updated_achievements(self, updated_achievements):
-        self.sendJSON(dict(command="updated_achievements", updated_achievements=updated_achievements))
+        self.sendJSON({"command": "updated_achievements", "updated_achievements": updated_achievements})
 
     async def command_admin(self, message):
         action = message['action']
@@ -285,7 +280,7 @@ class LobbyConnection():
                         self._logger.warning('Administrative action: %s closed client for %s with %s ban (Reason: %s)', self.player, player, duration, reason)
                         async with db.engine.acquire() as conn:
                             try:
-                                result = await conn.execute("SELECT reason from lobby_ban WHERE idUser=%s AND expires_at > NOW()", (message['user_id']))
+                                result = await db.queries.select_lobby_ban(conn, message['user_id'])
 
                                 row = await result.fetchone()
                                 if row:
@@ -296,17 +291,12 @@ class LobbyConnection():
                                         raise ClientError(f"Period '{period}' is not allowed!")
 
                                     # NOTE: Text formatting in sql string is only ok because we just checked it's value
-                                    await conn.execute(
-                                        ban.insert().values(
-                                            player_id=player.id,
-                                            author_id=self.player.id,
-                                            reason=reason,
-                                            expires_at=func.date_add(
-                                                func.now(),
-                                                text(f"interval :duration {period}")
-                                            ),
-                                            level='GLOBAL'
-                                        ),
+                                    await db.queries.insert_lobby_ban(
+                                        conn,
+                                        player_id=player.id,
+                                        author_id=self.player.id,
+                                        reason=reason,
+                                        period=period,
                                         duration=duration
                                     )
                             except pymysql.MySQLError as e:
@@ -323,7 +313,7 @@ class LobbyConnection():
 
             elif action == "requestavatars":
                 async with db.engine.acquire() as conn:
-                    result = await conn.execute("SELECT url, tooltip FROM `avatars_list`")
+                    result = await db.queries.select_avatars_list(conn)
 
                     data = {"command": "admin", "avatarlist": []}
                     async for row in result:
@@ -338,9 +328,9 @@ class LobbyConnection():
                 idavatar = message["idavatar"]
                 iduser = message["iduser"]
                 async with db.engine.acquire() as conn:
-                    await conn.execute("DELETE FROM `avatars` "
-                                              "WHERE `idUser` = %s "
-                                              "AND `idAvatar` = %s", (iduser, idavatar))
+                    await db.queries.delete_avatar(
+                        conn, user_id=iduser, avatar_id=idavatar
+                    )
 
             elif action == "add_avatar":
                 who = message['user']
