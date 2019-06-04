@@ -431,10 +431,7 @@ class Game(BaseGame):
             return
         self.ended = True
         async with db.engine.acquire() as conn:
-            await conn.execute(
-                "UPDATE game_stats "
-                "SET endTime = NOW() "
-                "WHERE id = %s", (self.id,))
+            await db.queries.update_game_ended(conn, self.id)
 
     async def on_game_end(self):
         try:
@@ -475,10 +472,7 @@ class Game(BaseGame):
         """
         self._results = {}
         async with db.engine.acquire() as conn:
-            result = await conn.execute(
-                "SELECT `playerId`, `place`, `score` "
-                "FROM `game_player_stats` "
-                "WHERE `gameId`=%s", (self.id,))
+            result = await db.queries.select_game_player_stats(conn, self.id)
 
             async for row in result:
                 player_id, startspot, score = row[0], row[1], row[2]
@@ -512,19 +506,11 @@ class Game(BaseGame):
                 self._logger.info("Score for player %s: %s", player, score)
                 rows.append((score, self.id, player.id))
 
-            await conn.execute(
-                "UPDATE game_player_stats "
-                "SET `score`=%s, `scoreTime`=NOW() "
-                "WHERE `gameId`=%s AND `playerId`=%s", rows)
+            await db.queries.update_game_scores(conn, rows)
 
     async def clear_data(self):
         async with db.engine.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM game_player_stats "
-                "WHERE gameId=%s", (self.id,))
-            await conn.execute(
-                "DELETE FROM game_stats "
-                "WHERE id=%s", (self.id,))
+            await db.queries.delete_game_stats(conn, self.id)
 
     async def persist_rating_change_stats(self, rating_groups, rating='global'):
         """
@@ -545,32 +531,17 @@ class Game(BaseGame):
             for player, new_rating in new_ratings.items():
                 self._logger.debug("New %s rating for %s: %s", rating, player, new_rating)
                 setattr(player, '{}_rating'.format(rating), new_rating)
-                await conn.execute(
-                    "UPDATE game_player_stats "
-                    "SET after_mean = %s, after_deviation = %s, scoreTime = NOW() "
-                    "WHERE gameId = %s AND playerId = %s",
-                    (new_rating.mu, new_rating.sigma, self.id, player.id))
+                await db.queries.update_game_ratings(
+                    conn, new_rating.mu, new_rating.sigma, self.id, player.id
+                )
                 if rating != 'ladder':
                     player.numGames += 1
 
-                await self._update_rating_table(conn, rating_table, player, new_rating)
+                is_victory = self.outcome(player) == GameOutcome.VICTORY
+
+                await db.queries.update_rating(conn, rating, player.id, new_rating.mu, new_rating.sigma, is_victory)
 
                 self.game_service.player_service.mark_dirty(player)
-
-    async def _update_rating_table(self, conn, table: str, player: Player, new_rating):
-        # If we are updating the ladder1v1_rating table then we also need to update
-        # the `winGames` column which doesn't exist on the global_rating table
-        if table == 'ladder1v1_rating':
-            is_victory = self.outcome(player) == GameOutcome.VICTORY
-            await conn.execute(
-                "UPDATE ladder1v1_rating "
-                "SET mean = %s, is_active=1, deviation = %s, numGames = numGames + 1, winGames = winGames + %s "
-                "WHERE id = %s", (new_rating.mu, new_rating.sigma, 1 if is_victory else 0, player.id))
-        else:
-            await conn.execute(
-                "UPDATE " + table + " "
-                "SET mean = %s, is_active=1, deviation = %s, numGames = numGames + 1 "
-                "WHERE id = %s", (new_rating.mu, new_rating.sigma, player.id))
 
     def set_player_option(self, player_id: int, key: str, value: Any):
         """
@@ -734,9 +705,7 @@ class Game(BaseGame):
         async with db.engine.acquire() as conn:
             # Determine if the map is blacklisted, and invalidate the game for ranking purposes if
             # so, and grab the map id at the same time.
-            result = await conn.execute(
-                "SELECT id, ranked FROM map_version "
-                "WHERE lower(filename) = lower(%s)", (self.map_file_path,))
+            result = await db.queries.select_map(conn, self.map_file_path)
             row = await result.fetchone()
 
             if row:
@@ -751,25 +720,18 @@ class Game(BaseGame):
             # In some cases, games can be invalidated while running: we check for those cases when
             # the game ends and update this record as appropriate.
 
-            await conn.execute(
-                "INSERT INTO game_stats(id, gameType, gameMod, `host`, mapId, gameName, validity)"
-                "VALUES(%s, %s, %s, %s, %s, %s, %s)",
-                (
-                    self.id,
-                    str(self.gameOptions.get('Victory').value),
-                    modId,
-                    self.host.id,
-                    self.map_id,
-                    self.name,
-                    self.validity.value
-                )
+            await db.queries.insert_game_stats(
+                conn,
+                self.id,
+                str(self.gameOptions.get('Victory').value),
+                modId,
+                self.host.id,
+                self.map_id,
+                self.name,
+                self.validity.value
             )
 
     async def update_game_player_stats(self):
-        query_str = "INSERT INTO `game_player_stats` " \
-                    "(`gameId`, `playerId`, `faction`, `color`, `team`, `place`, `mean`, `deviation`, `AI`, `score`) " \
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-
         query_args = []
         for player in self.players:
             player_option = functools.partial(self.get_player_option, player.id)
@@ -798,7 +760,7 @@ class Game(BaseGame):
             ))
 
         async with db.engine.acquire() as conn:
-            await conn.execute(query_str, query_args)
+            await db.queries.insert_game_player_stats(conn, query_args)
 
     def getGamemodVersion(self):
         return self.game_service.game_mode_versions[self.game_mode]
@@ -823,9 +785,7 @@ class Game(BaseGame):
         # Currently, we can only end up here if a game desynced or was a custom game that terminated
         # too quickly.
         async with db.engine.acquire() as conn:
-            await conn.execute(
-                "UPDATE game_stats SET validity = %s "
-                "WHERE id = %s", (new_validity_state.value, self.id))
+            await db.queries.update_invalid_game(conn, self.id, new_validity_state.value)
 
     def get_army_score(self, army):
         """

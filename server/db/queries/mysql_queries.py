@@ -337,3 +337,95 @@ async def insert_teamkill_report(
             VALUES (%s, %s, %s, %s)""",
         (teamkiller_id, victim_id, gameuid, gametime)
     )
+
+
+async def update_game_ended(conn, gameuid):
+    await conn.execute(
+        "UPDATE game_stats "
+        "SET endTime = NOW() "
+        "WHERE id = %s", gameuid
+    )
+
+
+async def select_game_player_stats(conn, gameuid):
+    return await conn.execute(
+        "SELECT `playerId`, `place`, `score` "
+        "FROM `game_player_stats` "
+        "WHERE `gameId`=%s", gameuid
+    )
+
+
+async def update_game_scores(conn, rows):
+    await conn.execute(
+        "UPDATE game_player_stats "
+        "SET `score`=%s, `scoreTime`=NOW() "
+        "WHERE `gameId`=%s AND `playerId`=%s", rows
+    )
+
+
+async def delete_game_stats(conn, gameuid):
+    await conn.execute(
+        "DELETE FROM game_player_stats "
+        "WHERE gameId=%s", gameuid
+    )
+    await conn.execute("DELETE FROM game_stats WHERE id=%s", gameuid)
+
+
+async def update_game_ratings(conn, mean, deviation, gameuid, player_id):
+    await conn.execute(
+        "UPDATE game_player_stats "
+        "SET after_mean = %s, after_deviation = %s, scoreTime = NOW() "
+        "WHERE gameId = %s AND playerId = %s",
+        (mean, deviation, gameuid, player_id)
+    )
+
+
+async def update_rating(conn, rating, player_id, mean, deviation, is_victory):
+    table = {"ladder": "ladder1v1_rating", "global": "global_rating"}[rating]
+    # If we are updating the ladder1v1_rating table then we also need to update
+    # the `winGames` column which doesn't exist on the global_rating table
+    if table == 'ladder1v1_rating':
+        await conn.execute(
+            "UPDATE ladder1v1_rating "
+            "SET mean = %s, is_active=1, deviation = %s, numGames = numGames + 1, winGames = winGames + %s "
+            "WHERE id = %s",
+            (mean, deviation, 1 if is_victory else 0, player_id)
+        )
+    else:
+        await conn.execute(
+            "UPDATE " + table + " "
+            "SET mean = %s, is_active=1, deviation = %s, numGames = numGames + 1 "
+            "WHERE id = %s", (mean, deviation, player_id)
+        )
+
+
+async def select_map(conn, map_file_path):
+    return await conn.execute(
+        "SELECT id, ranked FROM map_version "
+        "WHERE lower(filename) = lower(%s)", map_file_path
+    )
+
+
+async def insert_game_stats(
+    conn, gameuid, game_type, mod_uid, host_id, map_id, name, validity
+):
+    await conn.execute(
+        "INSERT INTO game_stats(id, gameType, gameMod, `host`, mapId, gameName, validity)"
+        "VALUES(%s, %s, %s, %s, %s, %s, %s)",
+        (gameuid, game_type, mod_uid, host_id, map_id, name, validity)
+    )
+
+
+async def insert_game_player_stats(conn, query_args):
+    await conn.execute(
+        "INSERT INTO `game_player_stats` "
+        "(`gameId`, `playerId`, `faction`, `color`, `team`, `place`, `mean`, `deviation`, `AI`, `score`) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", query_args
+    )
+
+
+async def update_invalid_game(conn, gameuid, validity):
+    await conn.execute(
+        "UPDATE game_stats SET validity = %s "
+        "WHERE id = %s", (validity, gameuid)
+    )

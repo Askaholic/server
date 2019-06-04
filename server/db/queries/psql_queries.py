@@ -156,3 +156,45 @@ async def insert_teamkill_report(
     conn, teamkiller_id, victim_id, gameuid, gametime
 ):
     raise NotImplementedError()
+
+
+async def update_game_ended(conn, gameuid):
+    raise NotImplementedError()
+
+
+async def select_game_player_stats(conn, gameuid):
+    raise NotImplementedError()
+
+
+async def update_game_scores(conn, rows):
+    raise NotImplementedError()
+
+
+async def delete_game_stats(conn, gameuid):
+    raise NotImplementedError()
+
+
+async def update_game_ratings(conn, mean, deviation, gameuid, player_id):
+    raise NotImplementedError()
+
+
+async def update_rating(conn, rating, player_id, mean, deviation, is_victory):
+    raise NotImplementedError()
+
+
+async def select_map(conn, map_file_path):
+    raise NotImplementedError()
+
+
+async def insert_game_stats(
+    conn, gameuid, game_type, mod_uid, host_id, map_id, name, validity
+):
+    raise NotImplementedError()
+
+
+async def insert_game_player_stats(conn, query_args):
+    raise NotImplementedError()
+
+
+async def update_invalid_game(conn, gameuid, validity):
+    raise NotImplementedError()
