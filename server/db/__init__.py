@@ -20,26 +20,32 @@ async def connect_engine(
     minsize=1, maxsize=1, echo=True
 ):
     global queries
-    if port == 5432:
+    if int(port) == 5432:
         from aiopg.sa import create_engine
         from .queries import psql_queries
         queries = psql_queries
+        kwargs = {
+            "database": db
+        }
     else:
         from aiomysql.sa import create_engine
         from .queries import mysql_queries
         queries = mysql_queries
+        kwargs = {
+            "db": db,
+            "autocommit": True
+        }
 
     engine = await create_engine(
+        loop=loop,
         host=host,
         port=port,
         user=user,
         password=password,
-        db=db,
-        autocommit=True,
-        loop=loop,
         minsize=minsize,
         maxsize=maxsize,
-        echo=echo
+        echo=echo,
+        **kwargs
     )
 
     set_engine(engine)

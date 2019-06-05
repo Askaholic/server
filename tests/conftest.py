@@ -11,6 +11,7 @@ import logging
 from unittest import mock
 
 import pytest
+import sqlalchemy
 from server.api.api_accessor import ApiAccessor
 from server.config import DB_LOGIN, DB_PASSWORD, DB_PORT, DB_SERVER
 from server.game_service import GameService
@@ -142,7 +143,11 @@ def db_engine(request, loop):
 @pytest.fixture(scope='session', autouse=True)
 def test_data(db_engine, loop):
     async def load_data():
-        with open('tests/data/test-data.sql') as f:
+        if 'mysql' in str(db_engine.dialect):
+            test_data = 'tests/data/test-data.sql'
+        else:
+            test_data = 'tests/data/pg-test-data.sql'
+        with open(test_data) as f:
             async with db_engine.acquire() as conn:
                 await conn.execute(f.read())
 
