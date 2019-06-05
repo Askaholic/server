@@ -1,8 +1,61 @@
-from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer,
-                        MetaData, SmallInteger, String, Table, Text)
+from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
+                        Integer, MetaData, SmallInteger, String, Table, Text)
 
 metadata = MetaData()
 
+account = Table(
+    'account', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('display_name', String(255), nullable=False),
+    Column('password', String(255)),
+    Column('last_agreed_tos_id', ForeignKey('terms_of_service.id')),
+    Column('last_login_user_agent', String(255)),
+    Column('last_login_ip_address', String(255)),
+    Column('last_login_time', DateTime),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
+avatar = Table(
+    'avatar', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('url', String(2000), nullable=False, unique=True),
+    Column('description', String(255), unique=True),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
+avatar_assignment = Table(
+    'avatar_assignment', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('account_id', ForeignKey('account.id'), nullable=False),
+    Column('avatar_id', ForeignKey('avatar.id'), nullable=False),
+    Column('selected', Boolean, nullable=False),
+    Column('expiry_time', DateTime),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False),
+)
+
+clan = Table(
+    'clan', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('name', String(40), nullable=False),
+    Column('tag', String(3), nullable=False),
+    Column('founder_id', ForeignKey('account.id'), nullable=False),
+    Column('leader_id', ForeignKey('account.id')),
+    Column('description', Text),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
+clan_membership = Table(
+    'clan_membership', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('clan_id', ForeignKey('clan.id'), nullable=False),
+    Column('member_id', ForeignKey('account.id'), nullable=False),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
 
 email_domain_ban = Table(
     'email_domain_ban', metadata,
@@ -44,12 +97,35 @@ game = Table(
     Column('update_time', DateTime, nullable=False)
 )
 
+group_permission_assignment = Table(
+    'group_permission_assignment', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('group_id', ForeignKey('user_group.id'), nullable=False),
+    Column('permission_id', ForeignKey('group_permission.id'), nullable=False),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False),
+)
+
 leaderboard = Table(
     'leaderboard', metadata,
     Column('id', Integer, primary_key=True),
     Column('technical_name', String(255), nullable=False),
     Column('name_key', String(255), nullable=False),
     Column('description_key', String(255), nullable=False),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
+leaderboard_rating = Table(
+    'leaderboard_rating', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('account_id', ForeignKey('account.id'), nullable=False),
+    Column('mean', Float(53), nullable=False),
+    Column('deviation', Float(53), nullable=False),
+    Column('rating', Float(53), nullable=False),
+    Column('total_games', Integer, nullable=False),
+    Column('won_games', Integer, nullable=False),
+    Column('leaderboard_id', ForeignKey('leaderboard.id'), nullable=False),
     Column('create_time', DateTime, nullable=False),
     Column('update_time', DateTime, nullable=False)
 )

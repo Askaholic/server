@@ -1,8 +1,9 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, select, and_
 
 from ..models_v2 import (
-    email_domain_ban, featured_mod, game, leaderboard, map_, map_version,
-    matchmaker_map, matchmaker_pool, mod_version
+    account, avatar, avatar_assignment, clan, clan_membership,
+    email_domain_ban, featured_mod, game, leaderboard, leaderboard_rating,
+    map_, map_version, matchmaker_map, matchmaker_pool, mod_version
 )
 
 
@@ -121,7 +122,55 @@ async def update_played_mods(conn, uids):
 
 
 async def select_player_data(conn, player_id):
-    raise NotImplementedError()
+    # yapf: disable
+
+    # TODO: Refactor this and add permissions
+    sql = select(
+        [
+            avatar.c.url.label("avatar_url"),
+            avatar.c.description.label("avatar_tooltip"),
+            select([leaderboard_rating.c.mean]).select_from(
+                leaderboard_rating.join(leaderboard)
+            ).where(and_(
+                leaderboard.c.technical_name == "global",
+                leaderboard_rating.c.account_id == account.c.id
+            )).label("global_mean"),
+            select([leaderboard_rating.c.deviation]).select_from(
+                leaderboard_rating.join(leaderboard)
+            ).where(and_(
+                leaderboard.c.technical_name == "global",
+                leaderboard_rating.c.account_id == account.c.id
+            )).label("global_deviation"),
+            select([leaderboard_rating.c.total_games]).select_from(
+                leaderboard_rating.join(leaderboard)
+            ).where(and_(
+                leaderboard.c.technical_name == "global",
+                leaderboard_rating.c.account_id == account.c.id
+            )).label("global_num_games"),
+            select([leaderboard_rating.c.mean]).select_from(
+                leaderboard_rating.join(leaderboard)
+            ).where(and_(
+                leaderboard.c.technical_name == "ladder1v1",
+                leaderboard_rating.c.account_id == account.c.id
+            )).label("ladder_mean"),
+            select([leaderboard_rating.c.deviation]).select_from(
+                leaderboard_rating.join(leaderboard)
+            ).where(and_(
+                leaderboard.c.technical_name == "ladder1v1",
+                leaderboard_rating.c.account_id == account.c.id
+            )).label("ladder_deviation"),
+            clan.c.tag.label("clan_tag"),
+        ],
+    ).select_from(
+        account
+        .outerjoin(clan_membership)
+        .outerjoin(clan)
+        .outerjoin(avatar_assignment)
+        .outerjoin(avatar)
+    ).where(account.c.id == player_id)
+    # yapf: enable
+
+    return await conn.execute(sql)
 
 
 async def select_uniqueid_exempt(conn):
@@ -133,9 +182,7 @@ async def select_client_version(conn):
 
 
 async def select_email_blacklist(conn):
-    return await conn.execute(
-        select([email_domain_ban.c.domain]).select_from(email_domain_ban)
-    )
+    return await conn.execute(select([email_domain_ban.c.domain]))
 
 
 async def select_ladder_history(conn, player_id, limit):
@@ -143,7 +190,7 @@ async def select_ladder_history(conn, player_id, limit):
 
 
 async def select_game_counter(conn):
-    return await conn.execute(select([func.max(game.c.id)]).select_from(game))
+    return await conn.execute(select([func.max(game.c.id)]))
 
 
 async def select_featured_mods(conn):
@@ -155,7 +202,7 @@ async def select_featured_mods(conn):
             featured_mod.c.description,
             featured_mod.c.public,
             featured_mod.c.ordinal,
-        ]).select_from(featured_mod)
+        ])
     )
 
 
@@ -163,7 +210,6 @@ async def select_ranked_mod_ids(conn):
     # yapf: disable
     return await conn.execute(
         select([mod_version.c.uuid])
-        .select_from(mod_version)
         .where(mod_version.c.ranked is True)
     )
     # yapf: enable
@@ -189,7 +235,6 @@ async def select_ladder_map_pool(conn):
 async def select_featured_mod_info(conn, mod_name):
     return await conn.execute(
         select([0, featured_mod.c.current_version])
-        .select_from(featured_mod)
         .where(featured_mod.c.short_name == mod_name)
     )
     # yapf: enable

@@ -18,10 +18,10 @@ insert into leaderboard_rating (account_id, mean, deviation, total_games, won_ga
     (101, 1500, 500, 0, 0, 1),
     (102, 1500, 500, 0, 0, 1),
     -- Ladder rating
-    (50,  1300, 400, 12, 6, 1),
-    (100, 1500, 500, 0, 0, 1),
-    (101, 1500, 500, 0, 0, 1),
-    (102, 1500, 500, 0, 0, 1)
+    (50,  1300, 400, 12, 6, 2),
+    (100, 1500, 500, 0, 0, 2),
+    (101, 1500, 500, 0, 0, 2),
+    (102, 1500, 500, 0, 0, 2)
 ;
 
 insert into avatar (id, url, description) values
