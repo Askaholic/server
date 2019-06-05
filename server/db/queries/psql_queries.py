@@ -1,3 +1,21 @@
+from sqlalchemy import func, select
+
+from ..models_v2 import (
+    email_domain_ban, featured_mod, game, leaderboard, map_, map_version,
+    matchmaker_map, matchmaker_pool, mod_version
+)
+
+
+class EmptyResultProxy(object):
+    """ Use this to return empty results without performing a query"""
+
+    async def fetchall(self):
+        return []
+
+    async def fetchone(self):
+        return None
+
+
 async def select_coop_maps(conn):
     raise NotImplementedError()
 
@@ -107,15 +125,17 @@ async def select_player_data(conn, player_id):
 
 
 async def select_uniqueid_exempt(conn):
-    raise NotImplementedError()
+    return EmptyResultProxy()
 
 
 async def select_client_version(conn):
-    raise NotImplementedError()
+    return EmptyResultProxy()
 
 
 async def select_email_blacklist(conn):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([email_domain_ban.c.domain]).select_from(email_domain_ban)
+    )
 
 
 async def select_ladder_history(conn, player_id, limit):
@@ -123,23 +143,56 @@ async def select_ladder_history(conn, player_id, limit):
 
 
 async def select_game_counter(conn):
-    raise NotImplementedError()
+    return await conn.execute(select([func.max(game.c.id)]).select_from(game))
 
 
 async def select_featured_mods(conn):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([
+            featured_mod.c.id,
+            featured_mod.c.short_name,
+            featured_mod.c.display_name,
+            featured_mod.c.description,
+            featured_mod.c.public,
+            featured_mod.c.ordinal,
+        ]).select_from(featured_mod)
+    )
 
 
 async def select_ranked_mod_ids(conn):
-    raise NotImplementedError()
+    # yapf: disable
+    return await conn.execute(
+        select([mod_version.c.uuid])
+        .select_from(mod_version)
+        .where(mod_version.c.ranked is True)
+    )
+    # yapf: enable
 
 
 async def select_ladder_map_pool(conn):
-    raise NotImplementedError()
+    # yapf: disable
+    return await conn.execute(
+        select([
+            matchmaker_map.c.map_version_id,
+            map_.c.display_name,
+            map_version.c.filename,
+        ]).select_from(
+            matchmaker_pool
+            .join(leaderboard)
+            .join(matchmaker_map)
+            .join(map_version)
+            .join(map_)
+        ).where(leaderboard.c.technical_name == 'ladder1v1')
+    )
 
 
 async def select_featured_mod_info(conn, mod_name):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([0, featured_mod.c.current_version])
+        .select_from(featured_mod)
+        .where(featured_mod.c.short_name == mod_name)
+    )
+    # yapf: enable
 
 
 async def insert_coop_leaderboard_entry(
