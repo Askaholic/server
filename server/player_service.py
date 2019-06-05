@@ -7,10 +7,6 @@ import server.db as db
 from server.decorators import with_logger
 from server.players import Player
 
-from .db.models import (
-    avatars_list, clan, global_rating, ladder1v1_rating, lobby_admin
-)
-
 
 @with_logger
 class PlayerService:
@@ -61,19 +57,19 @@ class PlayerService:
                 return
 
             player.global_rating = (
-                row[global_rating.c.mean], row[global_rating.c.deviation]
+                row["global_mean"], row["global_deviation"]
             )
-            player.numGames = row[global_rating.c.numGames]
+            player.numGames = row["global_num_games"]
 
             player.ladder_rating = (
-                row[ladder1v1_rating.c.mean], row[ladder1v1_rating.c.deviation]
+                row["ladder_mean"], row["ladder_deviation"]
             )
 
-            player.permission_group = row.get(lobby_admin.c.group) or 0
-            player.clan = row.get(clan.c.tag)
+            player.permission_group = row.get("permission_group") or 0
+            player.clan = row.get("clan_tag")
 
             url, tooltip = (
-                row.get(avatars_list.c.url), row.get(avatars_list.c.tooltip)
+                row.get("avatar_url"), row.get("avatar_tooltip")
             )
             if url and tooltip:
                 player.avatar = {"url": url, "tooltip": tooltip}

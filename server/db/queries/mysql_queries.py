@@ -217,17 +217,16 @@ async def select_player_data(conn, player_id):
     # yapf: disable
     sql = select(
         [
-            avatars_list.c.url,
-            avatars_list.c.tooltip,
-            global_rating.c.mean,
-            global_rating.c.deviation,
-            global_rating.c.numGames,
-            ladder1v1_rating.c.mean,
-            ladder1v1_rating.c.deviation,
-            lobby_admin.c.group,
-            clan.c.tag,
+            avatars_list.c.url.label("avatar_url"),
+            avatars_list.c.tooltip.label("avatar_tooltip"),
+            global_rating.c.mean.label("global_mean"),
+            global_rating.c.deviation.label("global_deviation"),
+            global_rating.c.numGames.label("global_num_games"),
+            ladder1v1_rating.c.mean.label("ladder_mean"),
+            ladder1v1_rating.c.deviation.label("ladder_deviation"),
+            lobby_admin.c.group.label("permission_group"),
+            clan.c.tag.label("clan_tag"),
         ],
-        use_labels=True,
     ).select_from(
         login.join(global_rating)
         .join(ladder1v1_rating)
