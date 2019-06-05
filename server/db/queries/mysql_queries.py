@@ -3,7 +3,7 @@ from sqlalchemy import and_, func, select, text
 from ..models import (
     avatars, avatars_list, ban, clan, clan_membership, friends_and_foes,
     game_featuredMods, game_player_stats, game_stats, global_rating,
-    ladder1v1_rating, login
+    ladder1v1_rating, login, lobby_admin
 )
 
 
@@ -224,6 +224,7 @@ async def select_player_data(conn, player_id):
             global_rating.c.numGames,
             ladder1v1_rating.c.mean,
             ladder1v1_rating.c.deviation,
+            lobby_admin.c.group,
             clan.c.tag,
         ],
         use_labels=True,
@@ -234,14 +235,11 @@ async def select_player_data(conn, player_id):
         .outerjoin(clan)
         .outerjoin(avatars)
         .outerjoin(avatars_list)
+        .outerjoin(lobby_admin)
     ).where(login.c.id == player_id)
     # yapf: enable
 
     return await conn.execute(sql)
-
-
-async def select_lobby_admins(conn):
-    return await conn.execute("SELECT `user_id`, `group` FROM lobby_admin")
 
 
 async def select_uniqueid_exempt(conn):

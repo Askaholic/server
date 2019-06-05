@@ -144,3 +144,9 @@ ladder1v1_rating = Table(
     Column('winGames',      Integer,    nullable=False),
     Column('is_active',     Boolean,    nullable=False)
 )
+
+lobby_admin = Table(
+    'lobby_admin', metadata,
+    Column('user_id',   Integer, ForeignKey('login.id'), primary_key=True),
+    Column('group',     Integer, nullable=False)
+)

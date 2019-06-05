@@ -106,10 +106,6 @@ async def select_player_data(conn, player_id):
     raise NotImplementedError()
 
 
-async def select_lobby_admins(conn):
-    raise NotImplementedError()
-
-
 async def select_uniqueid_exempt(conn):
     raise NotImplementedError()
 

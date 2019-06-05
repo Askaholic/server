@@ -507,12 +507,10 @@ class LobbyConnection():
             except (pymysql.OperationalError, pymysql.ProgrammingError):
                 self._logger.error("Failure updating NickServ password for %s", login)
 
-        permission_group = self.player_service.get_permission_group(player_id)
         self.player = Player(
             id=player_id,
             login=str(login),
             ip=self.peer_address.host,
-            permission_group=permission_group,
             lobby_connection=self
         )
 

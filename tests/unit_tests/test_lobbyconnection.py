@@ -87,7 +87,6 @@ def lobbyconnection(loop, mock_protocol, mock_games, mock_players, mock_player, 
 
     lc.player = mock_player
     lc.protocol = mock_protocol
-    lc.player_service.get_permission_group.return_value = 0
     lc.player_service.fetch_player_data = CoroMock()
     lc.peer_address = Address('127.0.0.1', 1234)
     return lc
