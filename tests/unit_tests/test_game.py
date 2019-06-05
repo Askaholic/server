@@ -498,7 +498,6 @@ async def test_to_dict(game, create_player):
         "title": game.sanitize_name(game.name),
         "state": 'playing',
         "featured_mod": game.game_mode,
-        "featured_mod_versions": game.getGamemodVersion(),
         "sim_mods": game.mods,
         "mapname": game.map_folder_name,
         "map_file_path": game.map_file_path,

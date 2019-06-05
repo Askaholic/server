@@ -762,9 +762,6 @@ class Game(BaseGame):
         async with db.engine.acquire() as conn:
             await db.queries.insert_game_player_stats(conn, query_args)
 
-    def getGamemodVersion(self):
-        return self.game_service.game_mode_versions[self.game_mode]
-
     def sanitize_name(self, name: str) -> str:
         """
         Replaces sequences of non-latin characters with an underscore and truncates the string to 128 characters
@@ -890,7 +887,6 @@ class Game(BaseGame):
             "title": self.name,
             "state": client_state,
             "featured_mod": self.game_mode,
-            "featured_mod_versions": self.getGamemodVersion(),
             "sim_mods": self.mods,
             "mapname": self.map_folder_name,
             "map_file_path": self.map_file_path,
