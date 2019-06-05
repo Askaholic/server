@@ -24,20 +24,16 @@ class Player(BasePlayer):
     def __init__(
         self,
         login: str = None,
-        session: int = 0,
         ip=None,
         id: int = 0,
         global_rating=None,
         ladder_rating=None,
         clan=None,
         numGames: int = 0,
-        permissionGroup: int = 0,
+        permission_group: int = 0,
         lobby_connection: "LobbyConnection" = None
     ):
         super().__init__(id, login)
-
-        # The id of the user in the `login` table of the database.
-        self.session = session
         self.ip = ip
 
         if global_rating is None:
@@ -47,7 +43,7 @@ class Player(BasePlayer):
         self.global_rating = global_rating
         self.ladder_rating = ladder_rating
 
-        #social
+        # Social
         self.avatar = None
         self.clan = clan
         self.country = None
@@ -57,14 +53,12 @@ class Player(BasePlayer):
 
         self.league = None
 
-        self.admin = permissionGroup >= 2
-        self.mod = permissionGroup >= 1
+        self.permission_group = permission_group
 
         self.numGames = numGames
 
         self.state = PlayerState.IDLE
 
-        self.expandLadder = 0
         self.faction = 1
 
         self._lobby_connection = lambda: None
@@ -73,6 +67,14 @@ class Player(BasePlayer):
 
         self._game = lambda: None
         self._game_connection = lambda: None
+
+    @property
+    def admin(self) -> bool:
+        return self.permission_group >= 2
+
+    @property
+    def mod(self) -> bool:
+        return self.permission_group >= 1
 
     @property
     def lobby_connection(self) -> "LobbyConnection":

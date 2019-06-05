@@ -509,11 +509,10 @@ class LobbyConnection():
 
         permission_group = self.player_service.get_permission_group(player_id)
         self.player = Player(
-            login=str(login),
-            session=self.session,
-            ip=self.peer_address.host,
             id=player_id,
-            permissionGroup=permission_group,
+            login=str(login),
+            ip=self.peer_address.host,
+            permission_group=permission_group,
             lobby_connection=self
         )
 
@@ -582,7 +581,14 @@ class LobbyConnection():
         if self.player.clan is not None:
             channels.append("#%s_clan" % self.player.clan)
 
-        json_to_send = {"command": "social", "autojoin": channels, "channels": channels, "friends": friends, "foes": foes, "power": permission_group}
+        json_to_send = {
+            "command": "social",
+            "autojoin": channels,
+            "channels": channels,
+            "friends": friends,
+            "foes": foes,
+            "power": self.player.permission_group
+        }
         self.sendJSON(json_to_send)
 
         self.send_mod_list()
