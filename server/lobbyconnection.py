@@ -371,7 +371,7 @@ class LobbyConnection():
 
         player_id, real_username, dbPassword, steamid, create_time, ban_reason, ban_expiry = (row[i] for i in range(7))
 
-        if dbPassword != password:
+        if dbPassword.replace('{sha256}', '') != password:
             raise AuthenticationError(auth_error_message)
 
         now = datetime.datetime.now()

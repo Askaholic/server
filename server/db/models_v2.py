@@ -36,6 +36,22 @@ avatar_assignment = Table(
     Column('update_time', DateTime, nullable=False),
 )
 
+ban = Table(
+    'ban', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('account_id', ForeignKey('account.id'), nullable=False),
+    Column('author_id', ForeignKey('account.id'), nullable=False),
+    Column('report_id', ForeignKey('moderation_report.id')),
+    Column('reason', String(255), nullable=False),
+    Column('expiry_time', DateTime),
+    Column('scope', String(255), nullable=False),
+    Column('revocation_time', DateTime),
+    Column('revocation_reason', String(255)),
+    Column('revocation_author_id', ForeignKey('account.id')),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
 clan = Table(
     'clan', metadata,
     Column('id', Integer, primary_key=True),
@@ -191,4 +207,14 @@ mod_version = Table(
     Column('mod_id', ForeignKey('mod.id'), nullable=False),
     Column('create_time', DateTime, nullable=False),
     Column('update_time', DateTime, nullable=False),
+)
+
+social_relation = Table(
+    'social_relation', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('from_id', ForeignKey('account.id'), nullable=False),
+    Column('to_id', ForeignKey('account.id'), nullable=False),
+    Column('relation', Enum('FRIEND', 'FOE', name='social_relation_type'), nullable=False),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
 )

@@ -1,9 +1,11 @@
-from sqlalchemy import func, select, and_
+import psycopg2
+from sqlalchemy import and_, func, select
 
 from ..models_v2 import (
-    account, avatar, avatar_assignment, clan, clan_membership,
+    account, avatar, avatar_assignment, ban, clan, clan_membership,
     email_domain_ban, featured_mod, game, leaderboard, leaderboard_rating,
-    map_, map_version, matchmaker_map, matchmaker_pool, mod_version
+    map_, map_version, matchmaker_map, matchmaker_pool, mod_version,
+    social_relation
 )
 
 
@@ -66,19 +68,50 @@ async def insert_user_avatar(conn, username, avatar):
 
 
 async def select_login_info(conn, username):
-    raise NotImplementedError()
+    # yapf: disable
+    return await conn.execute(
+        select([
+            account.c.id,
+            account.c.display_name,
+            account.c.password,
+            account.c.last_agreed_tos_id,  # Instead of steamid
+            account.c.create_time,
+            ban.c.reason,
+            ban.c.expiry_time,
+        ]).select_from(account.outerjoin(ban, account.c.id == ban.c.account_id))
+        .where(account.c.display_name == username)
+        .order_by(ban.c.expiry_time.desc())
+    )
+    # yapf: enable
 
 
 async def update_login(conn, ip, user_agent, player_id):
-    raise NotImplementedError()
+    await conn.execute(
+        account.update().values(
+            last_login_ip_address=ip,
+            last_login_user_agent=user_agent,
+            last_login_time=func.now()
+        ).where(account.c.id == player_id)
+    )
 
 
 async def update_irc_login(conn, username, password):
-    raise NotImplementedError()
+    try:
+        await conn.execute(
+            "UPDATE anope.anope_db_NickCore SET pass = %s WHERE display = %s",
+            (password, username)
+        )
+    except psycopg2.errors.UndefinedTable:
+        pass
 
 
 async def select_social(conn, player_id):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([
+            social_relation.c.to_id,
+            social_relation.c.relation,
+        ]).where(social_relation.c.from_id == player_id)
+    )
 
 
 async def select_user_avatars(conn, player_id):
