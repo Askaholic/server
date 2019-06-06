@@ -43,8 +43,7 @@ async def select_lobby_ban(conn, user_id):
             and_(
                 ban.c.account_id == user_id,
                 func.coalesce(ban.c.revocation_time, ban.c.expiry_time) >
-                func.now(),
-                ban.c.scope != 'CHAT'
+                func.now(), ban.c.scope != 'CHAT'
             )
         )
     )
@@ -311,19 +310,48 @@ async def insert_teamkill_report(
 
 
 async def update_game_ended(conn, gameuid):
-    raise NotImplementedError()
+    await conn.execute(
+        game.update().values(end_time=func.now()).where(game.c.id == gameuid)
+    )
 
 
 async def select_game_player_stats(conn, gameuid):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([
+            game_participant.c.participant_id,
+            game_participant.c.start_spot,
+            game_participant.c.score,
+        ]).where(game_participant.c.game_id == gameuid)
+    )
 
 
 async def update_game_scores(conn, rows):
-    raise NotImplementedError()
+    rows = list(
+        map(
+            lambda x: {
+                "score": x[0],
+                "game_id": x[1],
+                "player_id": x[2]
+            }, rows
+        )
+    )
+    # Sadly aiopg doesn't support executemany in async mode
+    for row in rows:
+        await conn.execute(
+            game_participant.update().values(score=row["score"]).where(
+                and_(
+                    game_participant.c.game_id == row["game_id"],
+                    game_participant.c.participant_id == row["player_id"]
+                )
+            )
+        )
 
 
 async def delete_game_stats(conn, gameuid):
-    raise NotImplementedError()
+    await conn.execute(
+        game_participant.delete().where(game_participant.c.game_id == gameuid)
+    )
+    await conn.execute(game.delete().where(game.c.id == gameuid))
 
 
 async def update_game_ratings(conn, mean, deviation, gameuid, player_id):
@@ -335,18 +363,48 @@ async def update_rating(conn, rating, player_id, mean, deviation, is_victory):
 
 
 async def select_map(conn, map_file_path):
-    raise NotImplementedError()
+    return await conn.execute(
+        select(
+            [map_version.c.id, map_version.c.ranked]
+        ).where(func.lower(map_version.c.filename) == map_file_path.lower())
+    )
 
 
 async def insert_game_stats(
     conn, gameuid, game_type, mod_uid, host_id, map_id, name, validity
 ):
-    raise NotImplementedError()
+    await conn.execute(
+        game.insert().values(
+            id=gameuid,
+            victory_condition=game_type,
+            featured_mod_id=mod_uid,
+            host_id=host_id,
+            map_version_id=map_id,
+            name=name,
+            validity=validity,
+            start_time=func.now()
+        )
+    )
 
 
 async def insert_game_player_stats(conn, query_args):
-    raise NotImplementedError()
+    query_args = list(
+        map(
+            lambda x: {
+                "game_id": x[0],
+                "participant_id": x[1],
+                "faction": x[2],
+                "color": x[3],
+                "team": x[4],
+                "start_spot": x[5],
+                "score": x[9]
+            }, query_args
+        )
+    )
+    await conn.execute(game_participant.insert().values(query_args))
 
 
 async def update_invalid_game(conn, gameuid, validity):
-    raise NotImplementedError()
+    await conn.execute(
+        game.update().values(validity=validity).where(game.c.id == gameuid)
+    )

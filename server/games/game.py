@@ -379,7 +379,7 @@ class Game(BaseGame):
 
             self._players_with_unsent_army_stats.remove(player)
             await self._game_stats_service.process_game_stats(player, self, self._army_stats)
-        except Exception as e:
+        except Exception:
             # Never let an error in processing army stats cascade
             self._logger.exception("Army stats could not be processed from player %s in game %s", player, self)
 
@@ -723,12 +723,12 @@ class Game(BaseGame):
             await db.queries.insert_game_stats(
                 conn,
                 self.id,
-                str(self.gameOptions.get('Victory').value),
+                self.gameOptions.get('Victory'),
                 modId,
                 self.host.id,
                 self.map_id,
                 self.name,
-                self.validity.value
+                self.validity
             )
 
     async def update_game_player_stats(self):
@@ -782,7 +782,7 @@ class Game(BaseGame):
         # Currently, we can only end up here if a game desynced or was a custom game that terminated
         # too quickly.
         async with db.engine.acquire() as conn:
-            await db.queries.update_invalid_game(conn, self.id, new_validity_state.value)
+            await db.queries.update_invalid_game(conn, self.id, new_validity_state)
 
     def get_army_score(self, army):
         """

@@ -409,7 +409,7 @@ async def insert_game_stats(
     await conn.execute(
         "INSERT INTO game_stats(id, gameType, gameMod, `host`, mapId, gameName, validity)"
         "VALUES(%s, %s, %s, %s, %s, %s, %s)",
-        (gameuid, game_type, mod_uid, host_id, map_id, name, validity)
+        (gameuid, str(game_type.value), mod_uid, host_id, map_id, name, validity.value)
     )
 
 
@@ -424,5 +424,5 @@ async def insert_game_player_stats(conn, query_args):
 async def update_invalid_game(conn, gameuid, validity):
     await conn.execute(
         "UPDATE game_stats SET validity = %s "
-        "WHERE id = %s", (validity, gameuid)
+        "WHERE id = %s", (validity.value, gameuid)
     )

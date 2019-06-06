@@ -22,7 +22,10 @@ class GameStatsService:
         highest_score = 0
         highest_scorer = None
 
-        for army_stats in json.loads(stats_json)['stats']:
+        if isinstance(stats_json, str):
+            stats_json = json.loads(stats_json)
+
+        for army_stats in stats_json['stats']:
             if army_stats['type'] == 'AI' and army_stats['name'] != 'civilian':
                 self._logger.debug("Ignoring AI game reported by %s", player.login)
                 return

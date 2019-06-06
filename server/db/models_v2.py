@@ -1,6 +1,8 @@
 from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
                         Integer, MetaData, SmallInteger, String, Table, Text)
 
+from ..games.game import ValidityState, Victory
+
 metadata = MetaData()
 
 account = Table(
@@ -107,8 +109,8 @@ game = Table(
     Column('host_id', ForeignKey('account.id'), nullable=False),
     Column('map_version_id', ForeignKey('map_version.id'), nullable=False, index=True),
     Column('name', String(255), nullable=False),
-    Column('validity', Enum('VALID', 'TOO_MANY_DESYNCS', 'WRONG_VICTORY_CONDITION', 'NO_FOG_OF_WAR', 'CHEATS_ENABLED', 'PREBUILT_ENABLED', 'NORUSH_ENABLED', 'BAD_UNIT_RESTRICTIONS', 'BAD_MAP', 'TOO_SHORT', 'BAD_MOD', 'COOP_NOT_RANKED', 'MUTUAL_DRAW', 'SINGLE_PLAYER', 'FFA_NOT_RANKED', 'UNEVEN_TEAMS_NOT_RANKED', 'UNKNOWN_RESULT', 'TEAMS_UNLOCKED', 'MULTIPLE_TEAMS', 'HAS_AI', 'STALE', 'SERVER_SHUTDOWN', name='game_validity'), nullable=False, index=True),
-    Column('victory_condition', Enum('DEMORALIZATION', 'DOMINATION', 'ERADICATION', 'SANDBOX', name='victory_condition'), nullable=False),
+    Column('validity', Enum(ValidityState, name='game_validity'), nullable=False, index=True),
+    Column('victory_condition', Enum(Victory, name='victory_condition'), nullable=False),
     Column('create_time', DateTime, nullable=False),
     Column('update_time', DateTime, nullable=False)
 )
