@@ -1,11 +1,13 @@
+import datetime
+
 import psycopg2
 from sqlalchemy import and_, func, select
 
 from ..models_v2 import (
     account, avatar, avatar_assignment, ban, clan, clan_membership,
-    email_domain_ban, featured_mod, game, leaderboard, leaderboard_rating,
-    map_, map_version, matchmaker_map, matchmaker_pool, mod_version,
-    social_relation
+    email_domain_ban, featured_mod, game, game_participant, leaderboard,
+    leaderboard_rating, map_, map_version, matchmaker_map, matchmaker_pool,
+    mod_version, social_relation
 )
 
 
@@ -127,7 +129,7 @@ async def update_user_avatars_set_selected(conn, player_id, avatar):
 
 
 async def select_matchmaker_ban(conn, player_id):
-    raise NotImplementedError()
+    return EmptyResultProxy()
 
 
 async def select_mods(conn):
@@ -219,7 +221,16 @@ async def select_email_blacklist(conn):
 
 
 async def select_ladder_history(conn, player_id, limit):
-    raise NotImplementedError()
+    query = select([
+        game.c.map_version_id,
+    ]).select_from(game_participant.join(game).join(featured_mod)).where(
+        and_(
+            game_participant.c.participant_id == player_id,
+            game.c.start_time >= func.now() - datetime.timedelta(days=1),
+            featured_mod.c.short_name == "ladder1v1",
+        )
+    ).order_by(game.c.start_time.desc()).limit(limit)
+    return await conn.execute(query)
 
 
 async def select_game_counter(conn):

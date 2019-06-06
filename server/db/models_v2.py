@@ -113,6 +113,22 @@ game = Table(
     Column('update_time', DateTime, nullable=False)
 )
 
+game_participant = Table(
+    'game_participant', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('game_id', ForeignKey('game.id'), nullable=False, index=True),
+    Column('participant_id', ForeignKey('account.id'), nullable=False, index=True),
+    Column('faction', Integer),
+    Column('color', SmallInteger, nullable=False),
+    Column('team', SmallInteger, nullable=False),
+    Column('start_spot', SmallInteger, nullable=False),
+    Column('score', SmallInteger, nullable=False),
+    Column('outcome', Enum('VICTORY', 'DRAW', 'DEFEAT', name='game_participant_outcome')),
+    Column('finish_time', DateTime, index=True),
+    Column('create_time', DateTime, nullable=False),
+    Column('update_time', DateTime, nullable=False)
+)
+
 group_permission_assignment = Table(
     'group_permission_assignment', metadata,
     Column('id', Integer, primary_key=True),
