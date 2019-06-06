@@ -376,9 +376,16 @@ class LobbyConnection():
 
         now = datetime.datetime.now()
 
-        if ban_reason is not None and now < ban_expiry:
-            self._logger.debug('Rejected login from banned user: %s, %s, %s', player_id, login, self.session)
-            raise ClientError("You are banned from FAF for {}.\n Reason :\n {}".format(humanize.naturaldelta(ban_expiry-now), ban_reason), recoverable=False)
+        def get_ban_expiry_text(ban_expiry):
+            if ban_expiry is None or ban_expiry - now > datetime.timedelta(days=365 * 100):
+                return "forever"
+            return humanize.naturaldelta(ban_expiry - now)
+
+        if ban_reason is not None:
+            if ban_expiry is None or now < ban_expiry:
+                ban_duration = get_ban_expiry_text(ban_expiry)
+                self._logger.debug('Rejected login from banned user: %s, %s, %s', player_id, login, self.session)
+                raise ClientError(f"You are banned from FAF for {ban_duration}.\n Reason :\n {ban_reason}", recoverable=False)
 
         # New accounts are prevented from playing if they didn't link to steam
 

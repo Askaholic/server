@@ -38,7 +38,16 @@ async def insert_social(conn, user_id, subject_id, status):
 
 
 async def select_lobby_ban(conn, user_id):
-    raise NotImplementedError()
+    return await conn.execute(
+        select([ban.c.reason]).where(
+            and_(
+                ban.c.account_id == user_id,
+                func.coalesce(ban.c.revocation_time, ban.c.expiry_time) >
+                func.now(),
+                ban.c.scope != 'CHAT'
+            )
+        )
+    )
 
 
 async def insert_lobby_ban(
@@ -79,9 +88,14 @@ async def select_login_info(conn, username):
             account.c.last_agreed_tos_id,  # Instead of steamid
             account.c.create_time,
             ban.c.reason,
-            ban.c.expiry_time,
-        ]).select_from(account.outerjoin(ban, account.c.id == ban.c.account_id))
-        .where(account.c.display_name == username)
+            func.coalesce(ban.c.revocation_time, ban.c.expiry_time),
+        ]).select_from(
+            account.outerjoin(ban, and_(
+                account.c.id == ban.c.account_id,
+                ban.c.scope != 'CHAT'
+            ))
+        )
+        .where(func.lower(account.c.display_name) == username)
         .order_by(ban.c.expiry_time.desc())
     )
     # yapf: enable
