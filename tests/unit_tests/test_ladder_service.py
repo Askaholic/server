@@ -444,6 +444,11 @@ async def test_start_game_called_on_match(ladder_service: LadderService, player_
 
     await asyncio.sleep(2)
 
+    ladder_service.ready_player(p1)
+    ladder_service.ready_player(p2)
+
+    await asyncio.sleep(1)
+
     ladder_service.inform_player.assert_called()
     ladder_service.start_game.assert_called_once()
 

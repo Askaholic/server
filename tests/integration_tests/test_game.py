@@ -279,7 +279,7 @@ async def test_partial_game_ended_rates_game(lobby_server, tmp_user):
         await read_until_command(host_proto, "player_info", timeout=10)
 
 
-@fast_forward(15)
+@fast_forward(70)
 async def test_ladder_game_not_joinable(lobby_server):
     """
     We should not be able to join AUTO_LOBBY games using the `game_join` command.

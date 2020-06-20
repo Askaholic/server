@@ -2,8 +2,10 @@ import asyncio
 import contextlib
 import itertools
 import re
+import weakref
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple
+from datetime import datetime, timedelta
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import aiocron
 from sqlalchemy import and_, func, select, text, true
@@ -29,7 +31,13 @@ from .db.models import (
 from .decorators import with_logger
 from .game_service import GameService
 from .games import FeaturedModType, LadderGame
-from .matchmaker import MapPool, MatchmakerQueue, Search
+from .matchmaker import (
+    MapPool,
+    MatchmakerQueue,
+    MatchOffer,
+    OfferTimeoutError,
+    Search
+)
 from .players import Player, PlayerState
 from .protocol import DisconnectedError
 from .rating import RatingType
@@ -53,6 +61,7 @@ class LadderService(Service):
         self.queues = {}
 
         self._searches: Dict[Player, Dict[str, Search]] = defaultdict(dict)
+        self._match_offers = weakref.WeakValueDictionary()
 
     async def initialize(self) -> None:
         await self.update_data()
@@ -258,21 +267,51 @@ class LadderService(Service):
 
     async def handle_queue_matches(self, queue: MatchmakerQueue):
         async for s1, s2 in queue.iter_matches():
-            try:
-                msg = {"command": "match_found", "queue": queue.name}
-                # TODO: Handle disconnection with a client supported message
-                await asyncio.gather(*[
-                    player.send_message(msg)
-                    for player in s1.players + s2.players
-                ])
-                asyncio.create_task(
-                    self.start_game(s1.players, s2.players, queue)
-                )
-            except Exception as e:
-                self._logger.exception(
-                    "Error processing match between searches %s, and %s: %s",
-                    s1, s2, e
-                )
+            asyncio.create_task(self.handle_match(queue, s1, s2))
+
+    async def handle_match(
+        self,
+        queue: MatchmakerQueue,
+        s1: Search,
+        s2: Search
+    ):
+        try:
+            msg = {"command": "match_found", "queue": queue.name}
+            all_players = s1.players + s2.players
+
+            for player in all_players:
+                player.write_message(msg)
+
+            offer = self.create_match_offer(all_players)
+            offer.write_broadcast_update()
+            await offer.wait_ready()
+
+            await self.start_game(s1.players, s2.players, queue)
+        except OfferTimeoutError:
+            self._logger.info(
+                "Match failed to start. Some players did not ready up in time: %s",
+                list(player.login for player in offer.get_unready_players())
+            )
+            # TODO: Unmatch and return to queue
+        except Exception as e:
+            self._logger.exception(
+                "Error processing match between searches %s, and %s: %s",
+                s1, s2, e
+            )
+
+    def create_match_offer(self, players: Iterable[Player]):
+        offer = MatchOffer(
+            players,
+            datetime.now() + timedelta(seconds=config.MATCH_OFFER_TIME)
+        )
+        for player in players:
+            self._match_offers[player] = offer
+        return offer
+
+    def ready_player(self, player: Player):
+        offer = self._match_offers.get(player)
+        if offer is not None:
+            offer.ready_player(player)
 
     async def start_game(
         self,

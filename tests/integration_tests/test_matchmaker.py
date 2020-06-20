@@ -46,6 +46,11 @@ async def queue_players_for_matchmaking(lobby_server):
     # If the players did not match, this will fail due to a timeout error
     await read_until_command(proto1, "match_found")
     await read_until_command(proto2, "match_found")
+    await read_until_command(proto1, "match_info")
+    await read_until_command(proto2, "match_info")
+
+    await proto1.send_message({"command": "match_ready"})
+    await proto2.send_message({"command": "match_ready"})
 
     return proto1, proto2
 

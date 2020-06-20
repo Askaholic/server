@@ -160,14 +160,14 @@ class Search:
         return quality([team1, team2])
 
     @property
-    def is_matched(self):
+    def is_matched(self) -> bool:
         return self._match.done() and not self._match.cancelled()
 
-    def done(self):
+    def done(self) -> bool:
         return self._match.done()
 
     @property
-    def is_cancelled(self):
+    def is_cancelled(self) -> bool:
         return self._match.cancelled()
 
     def matches_with(self, other: "Search"):
@@ -212,6 +212,9 @@ class Search:
                     adjusted_mean=adjusted_mean
                 ))
         self._match.set_result(other)
+
+    def unmatch(self):
+        self._match = asyncio.Future()
 
     async def await_match(self):
         """

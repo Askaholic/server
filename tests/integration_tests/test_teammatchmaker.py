@@ -44,7 +44,17 @@ async def queue_players_for_matchmaking(lobby_server):
 
 
 async def client_response(proto):
-    msg = await read_until_command(proto, "game_launch")
+    await read_until_command(proto, "match_info", timeout=5)
+    await proto.send_message({"command": "match_ready"})
+    await asyncio.wait_for(
+        read_until(
+            proto,
+            lambda msg:
+                msg["command"] == "match_info" and msg["players_ready"] == 4,
+        ),
+        timeout=10,
+    )
+    msg = await read_until_command(proto, "game_launch", timeout=5)
     # Ensures that the game enters the `LOBBY` state
     await proto.send_message({
         "command": "GameState",

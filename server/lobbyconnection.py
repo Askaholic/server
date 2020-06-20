@@ -935,6 +935,9 @@ class LobbyConnection:
         )
         await self.launch_game(game, is_host=True)
 
+    async def command_match_ready(self, message):
+        self.ladder_service.ready_player(self.player)
+
     async def launch_game(
         self,
         game,

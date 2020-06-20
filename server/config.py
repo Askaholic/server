@@ -87,7 +87,7 @@ class ConfigurationStore:
         self.LADDER_ANTI_REPETITION_LIMIT = 3
         self.LADDER_SEARCH_EXPANSION_MAX = 0.25
         self.LADDER_SEARCH_EXPANSION_STEP = 0.05
-        # The maximum amount of time in seconds) to wait between pops.
+        # The maximum amount of time (in seconds) to wait between pops.
         self.QUEUE_POP_TIME_MAX = 180
         # The number of players we would like to have in the queue when it pops. The
         # queue pop time will be adjusted based on the current rate of players queuing
@@ -95,6 +95,9 @@ class ConfigurationStore:
         self.QUEUE_POP_DESIRED_PLAYERS = 8
         # How many previous queue sizes to consider
         self.QUEUE_POP_TIME_MOVING_AVG_SIZE = 5
+        # Amount of time (in seconds) that players have to accept a match
+        # before it will time out.
+        self.MATCH_OFFER_TIME = 20
 
         self._defaults = {
             key: value for key, value in vars(self).items() if key.isupper()

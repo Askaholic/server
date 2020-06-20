@@ -154,7 +154,11 @@ class MatchmakerQueue:
         loop = asyncio.get_running_loop()
         new_matches = filter(
             lambda m: self.match(m[0], m[1]),
-            await loop.run_in_executor(None, make_matches, searches)
+            await loop.run_in_executor(
+                None,
+                make_matches,
+                (search for search in searches if not search.done())
+            )
         )
         self._matches.extend(new_matches)
 
