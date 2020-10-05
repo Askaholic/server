@@ -107,6 +107,8 @@ async def test_start_game_1v1(
     assert isinstance(game, LadderGame)
     assert game.rating_type == queue.rating_type
     assert game.max_players == 2
+    assert p1.state is PlayerState.HOSTING
+    assert p2.state is PlayerState.JOINING
 
 
 @fast_forward(120)
@@ -125,6 +127,8 @@ async def test_start_game_timeout(
     assert p1.lobby_connection.launch_game.called
     # TODO: Once client supports `match_cancelled` change this to `assert not ...`
     assert p2.lobby_connection.launch_game.called
+    assert p1.state is PlayerState.IDLE
+    assert p2.state is PlayerState.IDLE
 
 
 async def test_start_game_with_teams(
@@ -152,6 +156,10 @@ async def test_start_game_with_teams(
     assert isinstance(game, LadderGame)
     assert game.rating_type == queue.rating_type
     assert game.max_players == 4
+    assert p1.state is PlayerState.HOSTING
+    assert p2.state is PlayerState.JOINING
+    assert p3.state is PlayerState.JOINING
+    assert p4.state is PlayerState.JOINING
 
 
 async def test_inform_player(ladder_service: LadderService, player_factory):

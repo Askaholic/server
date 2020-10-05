@@ -287,10 +287,10 @@ class LadderService(Service):
         self._logger.debug(
             "Starting %s game between %s and %s", queue.name, team1, team2
         )
+        host = team1[0]
+        all_players = team1 + team2
+        all_guests = all_players[1:]
         try:
-            host = team1[0]
-            all_players = team1 + team2
-            all_guests = all_players[1:]
 
             host.state = PlayerState.HOSTING
             for guest in all_guests:
@@ -380,6 +380,9 @@ class LadderService(Service):
         except Exception:
             self._logger.exception("Failed to start ladder game!")
             msg = {"command": "match_cancelled"}
+            # TODO: Adjust this for multiqueue support
+            for player in all_players:
+                player.state = PlayerState.IDLE
             with contextlib.suppress(DisconnectedError):
                 await asyncio.gather(*[
                     player.send_message(msg) for player in all_players
