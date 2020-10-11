@@ -21,15 +21,15 @@ async def connect_players(lobby_server):
     protos = [proto for _, _, proto in res]
     ids = [id_ for id_, _, _ in res]
 
-    await asyncio.gather(*[
-        read_until_command(proto, "game_info") for proto in protos
-    ])
-
-    return ids, protos
+    return protos, ids
 
 
 async def queue_players_for_matchmaking(lobby_server):
-    ids, protos = await connect_players(lobby_server)
+    protos, ids = await connect_players(lobby_server)
+
+    await asyncio.gather(*[
+        read_until_command(proto, "game_info") for proto in protos
+    ])
 
     await asyncio.gather(*[
         proto.send_message({
@@ -96,7 +96,7 @@ async def test_game_matchmaking(lobby_server):
 
 @fast_forward(10)
 async def test_game_matchmaking_with_parties(lobby_server):
-    ids, protos = await connect_players(lobby_server)
+    protos, ids = await connect_players(lobby_server)
     id1, id2, id3, id4 = ids
     proto1, proto2, proto3, proto4 = protos
 
@@ -157,7 +157,6 @@ async def test_game_matchmaking_with_parties(lobby_server):
         "queue_name": "tmm2v2",
         "state": "start",
     })
-
     msgs = await asyncio.gather(*[client_response(proto) for proto in protos])
 
     uid = set(msg["uid"] for msg in msgs)
@@ -170,6 +169,119 @@ async def test_game_matchmaking_with_parties(lobby_server):
         assert msg["team"] in (2, 3)
         assert msg["map_position"] in (1, 2, 3, 4)
         assert msg["faction"] == i + 1
+
+
+@fast_forward(15)
+async def test_game_matchmaking_multiqueue(lobby_server):
+    protos, _ = await connect_players(lobby_server)
+
+    await asyncio.gather(*[
+        read_until_command(proto, "game_info") for proto in protos
+    ])
+
+    await protos[0].send_message({
+        "command": "game_matchmaking",
+        "state": "start",
+        "faction": "uef",
+        "queue_name": "ladder1v1"
+    })
+    await read_until_command(protos[0], "search_info")
+    await asyncio.gather(*[
+        proto.send_message({
+            "command": "game_matchmaking",
+            "state": "start",
+            "faction": "aeon",
+            "queue_name": "tmm2v2"
+        })
+        for proto in protos
+    ])
+    msg = await read_until(
+        protos[0],
+        lambda msg: (
+            msg["command"] == "search_info" and msg["queue_name"] == "ladder1v1"
+        )
+    )
+    assert msg == {
+        "command": "search_info",
+        "queue_name": "ladder1v1",
+        "state": "stop"
+    }
+    msgs = await asyncio.gather(*[client_response(proto) for proto in protos])
+
+    uid = set(msg["uid"] for msg in msgs)
+    assert len(uid) == 1
+    for msg in msgs:
+        assert msg["init_mode"] == 1
+        assert "None" not in msg["name"]
+        assert msg["mod"] == "faf"
+        assert msg["expected_players"] == 4
+        assert msg["team"] in (2, 3)
+        assert msg["map_position"] in (1, 2, 3, 4)
+        assert msg["faction"] == 2
+
+
+@fast_forward(60)
+async def test_game_matchmaking_multiqueue_multimatch(lobby_server):
+    """
+    Scenario where both queues could possibly generate a match.
+    Queues:
+        ladder1v1 - 2 players join
+        tmm2v2    - 4 players join
+    Result:
+        Either one of the queues generates a match, but not both.
+    """
+    protos, _ = await connect_players(lobby_server)
+
+    await asyncio.gather(*[
+        read_until_command(proto, "game_info") for proto in protos
+    ])
+
+    ladder1v1_tasks = [
+        proto.send_message({
+            "command": "game_matchmaking",
+            "state": "start",
+            "faction": "uef",
+            "queue_name": "ladder1v1"
+        })
+        for proto in protos[:2]
+    ]
+    await asyncio.gather(*[
+        proto.send_message({
+            "command": "game_matchmaking",
+            "state": "start",
+            "faction": "aeon",
+            "queue_name": "tmm2v2"
+        })
+        for proto in protos
+    ] + ladder1v1_tasks)
+    msg1 = await read_until_command(protos[0], "match_found")
+    msg2 = await read_until_command(protos[1], "match_found")
+
+    matched_queue = msg1["queue"]
+    if matched_queue == "ladder1v1":
+        with pytest.raises(asyncio.TimeoutError):
+            await read_until_command(protos[2], "match_found", timeout=3)
+        with pytest.raises(asyncio.TimeoutError):
+            await read_until_command(protos[3], "match_found", timeout=3)
+        with pytest.raises(asyncio.TimeoutError):
+            await read_until_command(protos[2], "search_info", timeout=3)
+        with pytest.raises(asyncio.TimeoutError):
+            await read_until_command(protos[3], "search_info", timeout=3)
+    else:
+        await read_until_command(protos[2], "match_found", timeout=3)
+        await read_until_command(protos[3], "match_found", timeout=3)
+
+    assert msg1 == msg2
+
+    def other_cancelled(msg):
+        return (
+            msg["command"] == "search_info"
+            and msg["queue_name"] != matched_queue
+        )
+    msg1 = await read_until(protos[0], other_cancelled, timeout=3)
+    msg2 = await read_until(protos[1], other_cancelled, timeout=3)
+    assert msg1 == msg2
+    assert msg1["state"] == "stop"
 
 
 @fast_forward(60)
