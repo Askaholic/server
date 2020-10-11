@@ -6,8 +6,9 @@ from ..factions import Faction
 
 
 class PartyMember:
-    def __init__(self, player: Player):
+    def __init__(self, player: Player, ready: bool = False):
         self.player = player
+        self.ready = ready
         self.factions = [
             Faction.uef,
             Faction.aeon,
@@ -26,5 +27,6 @@ class PartyMember:
     def to_dict(self):
         return {
             "player": self.player.id,
+            "ready": self.ready,
             "factions": list(faction.name for faction in self.factions)
         }

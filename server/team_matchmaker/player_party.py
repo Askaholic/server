@@ -39,6 +39,9 @@ class PlayerParty():
     def players(self) -> List[Player]:
         return list(member.player for member in self._members.values())
 
+    def is_ready(self) -> bool:
+        return all(member.ready for member in self._members.values())
+
     def is_disbanded(self) -> bool:
         return not any(m.player == self.owner for m in self._members.values())
 
@@ -65,6 +68,12 @@ class PlayerParty():
         assert player in self.invited_players
 
         del self.invited_players[player]
+
+    def ready_player(self, player: Player) -> None:
+        self._members[player].ready = True
+
+    def unready_player(self, player: Player) -> None:
+        self._members[player].ready = False
 
     def set_factions(self, player: Player, factions: List[Faction]) -> None:
         self._members[player].factions = factions
