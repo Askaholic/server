@@ -963,18 +963,14 @@ class GameConnection(GpgNetServerProtocol):
         This message is sent by FA when it doesn&#39;t know what to do.
         &#34;&#34;&#34;
         assert self.game
-        state = self.player.state
 
-        if state == PlayerState.HOSTING:
+        if self.player == self.game.host:
             self.game.state = GameState.LOBBY
             self._state = GameConnectionState.CONNECTED_TO_HOST
             self.game.add_game_connection(self)
-            self.game.host = self.player
-        elif state == PlayerState.JOINING:
-            return
+            self.player.state = PlayerState.HOSTING
         else:
-            self._logger.error(&#34;Unknown PlayerState: %s&#34;, state)
-            await self.abort()
+            self.player.state = PlayerState.JOINING
 
     async def _handle_lobby_state(self):
         &#34;&#34;&#34;
@@ -4094,17 +4090,19 @@ class LadderService(Service):
                 game_options=game_options
             )
 
-            def game_options(player: Player) -&gt; GameLaunchOptions:
+            def make_game_options(player: Player) -&gt; GameLaunchOptions:
                 return options._replace(
                     team=game.get_player_option(player.id, &#34;Team&#34;),
                     faction=player.faction,
                     map_position=game.get_player_option(player.id, &#34;StartSpot&#34;)
                 )
 
-            await host.lobby_connection.launch_game(
-                game, is_host=True, options=game_options(host)
-            )
             try:
+                host.lobby_connection.write_launch_game(
+                    game,
+                    is_host=True,
+                    options=make_game_options(host)
+                )
                 await game.wait_hosted(60)
             finally:
                 # TODO: Once the client supports `match_cancelled`, don&#39;t
@@ -4113,13 +4111,13 @@ class LadderService(Service):
                 # think it is searching for ladder, even though the server has
                 # already removed it from the queue.
 
-                await asyncio.gather(*[
-                    guest.lobby_connection.launch_game(
-                        game, is_host=False, options=game_options(guest)
-                    )
-                    for guest in all_guests
-                    if guest.lobby_connection is not None
-                ])
+                for guest in all_guests:
+                    if guest.lobby_connection is not None:
+                        guest.lobby_connection.write_launch_game(
+                            game,
+                            is_host=False,
+                            options=make_game_options(guest)
+                        )
             await game.wait_launched(60 + 10 * len(all_guests))
             self._logger.debug(&#34;Ladder game launched successfully %s&#34;, game)
         except Exception as e:
@@ -4134,7 +4132,8 @@ class LadderService(Service):
             if game:
                 await game.on_game_end()
 
-            msg = {&#34;command&#34;: &#34;match_cancelled&#34;}
+            game_id = game.id if game else None
+            msg = {&#34;command&#34;: &#34;match_cancelled&#34;, &#34;game_id&#34;: game_id}
             for player in all_players:
                 if player.state == PlayerState.STARTING_AUTOMATCH:
                     player.state = PlayerState.IDLE
@@ -4525,17 +4524,19 @@ so it should only perform fast operations.</p></div>
             game_options=game_options
         )
 
-        def game_options(player: Player) -&gt; GameLaunchOptions:
+        def make_game_options(player: Player) -&gt; GameLaunchOptions:
             return options._replace(
                 team=game.get_player_option(player.id, &#34;Team&#34;),
                 faction=player.faction,
                 map_position=game.get_player_option(player.id, &#34;StartSpot&#34;)
             )
 
-        await host.lobby_connection.launch_game(
-            game, is_host=True, options=game_options(host)
-        )
         try:
+            host.lobby_connection.write_launch_game(
+                game,
+                is_host=True,
+                options=make_game_options(host)
+            )
             await game.wait_hosted(60)
         finally:
             # TODO: Once the client supports `match_cancelled`, don&#39;t
@@ -4544,13 +4545,13 @@ so it should only perform fast operations.</p></div>
             # think it is searching for ladder, even though the server has
             # already removed it from the queue.
 
-            await asyncio.gather(*[
-                guest.lobby_connection.launch_game(
-                    game, is_host=False, options=game_options(guest)
-                )
-                for guest in all_guests
-                if guest.lobby_connection is not None
-            ])
+            for guest in all_guests:
+                if guest.lobby_connection is not None:
+                    guest.lobby_connection.write_launch_game(
+                        game,
+                        is_host=False,
+                        options=make_game_options(guest)
+                    )
         await game.wait_launched(60 + 10 * len(all_guests))
         self._logger.debug(&#34;Ladder game launched successfully %s&#34;, game)
     except Exception as e:
@@ -4565,7 +4566,8 @@ so it should only perform fast operations.</p></div>
         if game:
             await game.on_game_end()
 
-        msg = {&#34;command&#34;: &#34;match_cancelled&#34;}
+        game_id = game.id if game else None
+        msg = {&#34;command&#34;: &#34;match_cancelled&#34;, &#34;game_id&#34;: game_id}
         for player in all_players:
             if player.state == PlayerState.STARTING_AUTOMATCH:
                 player.state = PlayerState.IDLE
